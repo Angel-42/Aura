@@ -44,3 +44,6 @@
 /build/
 /bin/
 .vscode/
+
+# Binary files
+aura
