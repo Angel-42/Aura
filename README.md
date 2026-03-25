@@ -1,57 +1,53 @@
+# 🌟 Aura
 
 ![Build](https://img.shields.io/badge/build-passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+![C++](https://img.shields.io/badge/C++-20-orange)
 
-# Aura
+**Aura** est un framework de contrôle gestuel en C++ utilisant la vision par ordinateur. Il transforme le flux d'une webcam en commandes système (clavier/souris) pour piloter n'importe quel jeu ou application sous Linux.
 
-Aura est une application C++ utilisant OpenCV pour la capture et le traitement vidéo, conçue pour être simple à compiler et à exécuter sous Linux. Le but ? S'amuser avec la manipulation vidéo en C++ sur des jeux video.
+---
 
-## Structure du projet
+## 🚀 Fonctionnalités
+- **Capture temps réel** : Flux vidéo optimisé et threadé.
+- **Traitement d'image** : Isolation via conversion HSV et filtrage morphologique.
+- **Analyse de forme** : Détection d'enveloppe convexe (Convex Hull) pour reconnaître les gestes.
+- **Contrôle système** : Simulation d'inputs via **X11/Xtst** (compatibilité universelle).
+- **Lissage** : Implémentation d'un **Filtre de Kalman** pour une précision accrue.
 
-```
+## 📂 Structure du projet
+```text
 Aura/
-├── CMakeLists.txt
-├── include/
-│   └── Camera.hpp
-├── src/
-│   ├── main.cpp
-│   └── Camera.cpp
-├── build/           # Dossier de build généré automatiquement
-├── scripts/
-│   ├── build.sh     # Script de compilation (build, clean, fclean)
-│   └── aura.sh      # Script de lancement avec LD_PRELOAD
-├── assets/          # (optionnel) Ressources du projet
+├── CMakeLists.txt      # Configuration du build
+├── include/            # Headers (.hpp)
+├── src/                # Sources (.cpp)
+├── scripts/            # Scripts de build et lancement
+└── assets/             # Ressources et config
 ```
 
-## Prérequis
-- CMake
-- g++ (recommandé : >= 13)
-- OpenCV 4.x
+## 🛠️ Prérequis
+- **Compilateur** : g++ (>=13 recommandé)
+- **Outils** : CMake
+- **Librairies** : OpenCV 4.x, X11, Xtst
 
-## Compilation
-
-```sh
-./scripts/build.sh         # Compile le projet
-./scripts/build.sh clean   # Nettoie le dossier de build
-./scripts/build.sh fclean  # Nettoie tout (build + exécutable)
+**Installation rapide (Ubuntu/Debian) :**
+```bash
+sudo apt update && sudo apt install libopencv-dev build-essential cmake libx11-dev libxtst-dev
 ```
 
-## Exécution
-
-Depuis la racine du projet :
-
-```sh
-./scripts/aura.sh    # Utilise LD_PRELOAD pour éviter les problèmes avec certaines installations de VS Code
-or
-./aura               # Exécute directement l'application
+## 🔨 Compilation & Exécution
+Le projet utilise des scripts simplifiés à la racine :
+```bash
+./scripts/build.sh          # Compiler le projet
+./scripts/build.sh fclean    # Nettoyer tout le projet
+./scripts/aura.sh           # Lancer l'application (fix LD_PRELOAD)
 ```
 
-## Notes
-- Si vous utilisez VS Code installé via Snap, des problèmes de bibliothèques peuvent survenir. Utilisez le script aura.sh pour contourner les soucis de LD_PRELOAD.
-- Le binaire final sera généré dans le dossier racine sous le nom `aura`.
+## 📝 Notes
+Si vous utilisez VS Code (version Snap), utilisez impérativement ```./scripts/aura.sh``` pour éviter les conflits de bibliothèques système.
 
-## Licence
-MIT
+## ⚖️ Licence
+Distribué sous licence MIT.
 
-## Auteur
-@Angel-42
+## 👤 Auteur
+**Angel SEVERAN** (@Angel-42)
