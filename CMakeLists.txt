@@ -16,6 +16,7 @@ find_package(OpenCV REQUIRED)
 set(AURA_LIB_SOURCES
     src/Core/KalmanFilter.cpp
     src/Config/CalibConfig.cpp
+    src/Config/ProfileManager.cpp
     src/Vision/Camera.cpp
     src/Vision/Calibrator.cpp
     src/Vision/HandTracker.cpp

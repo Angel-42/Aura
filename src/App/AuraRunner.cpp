@@ -1,4 +1,5 @@
 #include "Aura/App/AuraRunner.hpp"
+#include "Aura/Config/ProfileManager.hpp"
 #include <iostream>
 #include <algorithm>
 #include <cmath>
@@ -71,7 +72,29 @@ void AuraRunner::setupCalibration() {
     calibConfig_.load(name, hsvRange_);
 }
 
-void AuraRunner::setupMapping()  { mapper_.loadDefault(); }
+void AuraRunner::setupMapping() {
+    Config::ProfileManager pm;
+    pm.initDefault("config/default_mapping.txt");
+
+    const std::string& name = opts_.profile.empty() ? "default" : opts_.profile;
+
+    if (!pm.exists(name)) {
+        std::cerr << "[AuraRunner] Profil '" << name << "' introuvable dans " << pm.profilesDir() << "\n";
+        auto available = pm.list();
+        if (!available.empty()) {
+            std::cerr << "[AuraRunner] Profils disponibles :";
+            for (const auto& p : available) std::cerr << " " << p;
+            std::cerr << "\n";
+        }
+        // Fallback sur le mapping embarqué dans config/
+        std::cerr << "[AuraRunner] Fallback sur config/default_mapping.txt\n";
+        mapper_.loadDefault();
+        return;
+    }
+
+    mapper_.load(pm.path(name));
+    std::cout << "[AuraRunner] Profil '" << name << "' ← " << pm.path(name) << "\n";
+}
 
 void AuraRunner::setupDebugUI() {
     cv::namedWindow("AURA Feed", cv::WINDOW_NORMAL);

@@ -23,6 +23,9 @@ struct RunnerOptions {
     std::string saveCalib;
     bool autoCalib    = false;
 
+    // Profil de mapping (nom du fichier dans ~/.aura/profiles/, sans extension)
+    std::string profile;  // "" = "default"
+
     // Sensibilité curseur
     float speed    = 1.5f;
     float deadzone = 0.02f;

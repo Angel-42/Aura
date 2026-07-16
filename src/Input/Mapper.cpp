@@ -120,6 +120,12 @@ bool Mapper::load(const std::filesystem::path& path) {
         std::string rawKey = trim(trimmed.substr(0, sep));
         std::string value  = trim(trimmed.substr(sep + 1));
 
+        // Supprimer les commentaires inline (# jusqu'à fin de ligne)
+        auto commentPos = value.find('#');
+        if (commentPos != std::string::npos)
+            value = trim(value.substr(0, commentPos));
+        if (value.empty()) continue;
+
         auto [side, gestureKey] = splitSidePrefix(rawKey);
 
         Core::GestureType gesture = parseGesture(gestureKey);
@@ -129,9 +135,21 @@ bool Mapper::load(const std::filesystem::path& path) {
         }
 
         Action action = parseAction(value);
+
+        // NONE explicite = pas d'action. Valide pour overrider côté spécifique.
+        // Pour les bindings génériques, NONE est la valeur par défaut — on ne le stocke pas.
         if (action.type == ActionType::NONE) {
-            std::cerr << "[Mapper] Unknown action '" << value << "' at line " << lineNum << "\n";
-            continue;
+            std::string firstToken;
+            std::istringstream chk(value);
+            chk >> firstToken;
+            std::transform(firstToken.begin(), firstToken.end(), firstToken.begin(),
+                           [](unsigned char c){ return std::toupper(c); });
+            if (firstToken != "NONE") {
+                std::cerr << "[Mapper] Unknown action '" << value << "' at line " << lineNum << "\n";
+                continue;
+            }
+            // NONE générique → skip (c'est le défaut)
+            if (side == Core::HandSide::UNKNOWN) continue;
         }
 
         if (side == Core::HandSide::LEFT)        leftMapping_[gesture]  = action;
