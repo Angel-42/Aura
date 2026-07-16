@@ -183,12 +183,27 @@ struct DualGestureEvent {
 // TWO_FINGERS + TWO_FINGERS = KEY_COMBO CTRL Z
 ```
 
-### 4. Système de profils ("comme un clavier")
+### 4. Auto-switch de profil selon l'application active
 
-Profils nommés dans `~/.aura/profiles/<name>.txt`. Option `--profile <name>` en CLI.
-Chaque profil = un fichier mapping complet. Exemples : `gaming.txt`, `browser.txt`, `default.txt`.
+Détecter la fenêtre au premier plan et recharger le bon profil automatiquement.
 
-À terme : live rebinding (appui sur touche + geste = bind immédiat), sans recompiler.
+Fichier de config `~/.aura/auto_profile.txt` :
+```
+firefox   = browser
+minecraft = gaming
+code      = default
+```
+
+Implémentation : thread de surveillance dans AuraRunner + hot-reload du Mapper.
+- Linux : `xdotool getactivewindow getwindowname`
+- macOS : AppleScript / `NSWorkspace.frontmostApplication`
+
+**À faire après** avoir configuré plusieurs profils en conditions réelles.
+
+### 5. Live rebinding (dépend de SFML)
+
+Appui sur un bouton dans la démo → geste → bind immédiat dans le profil actif.
+Nécessite la démo SFML comme surface d'affichage.
 
 ### 5. Tests additionnels
 
