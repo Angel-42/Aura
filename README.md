@@ -2,49 +2,82 @@
 
 ![Build](https://img.shields.io/badge/build-passing-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![C++](https://img.shields.io/badge/C++-20-orange)
+![C++](https://img.shields.io/badge/C%2B%2B-17-orange)
 
-**Aura** est un framework de contrôle gestuel en C++ utilisant la vision par ordinateur. Il transforme le flux d'une webcam en commandes système (clavier/souris) pour piloter n'importe quel jeu ou application sous Linux.
+**Aura** est pour l'instant un outil de calibration HSV et de capture webcam en OpenCV.
+Il prépare une base pour un framework de traitement de geste et de commande système.
 
 ---
 
-## 🚀 Fonctionnalités
-- **Capture temps réel** : Flux vidéo optimisé et threadé.
-- **Traitement d'image** : Isolation via conversion HSV et filtrage morphologique.
-- **Analyse de forme** : Détection d'enveloppe convexe (Convex Hull) pour reconnaître les gestes.
-- **Contrôle système** : Simulation d'inputs via **X11/Xtst** (compatibilité universelle).
-- **Lissage** : Implémentation d'un **Filtre de Kalman** pour une précision accrue.
+## 🚀 Fonctionnalités actuelles
+- **Calibration HSV** : ajustez les plages de teinte, saturation et valeur en temps réel.
+- **Détection de main** : segmentation de la main sur le masque HSV, plus le plus grand contour.
+- **Analyse de forme** : calcul de l’enveloppe convexe (convex hull) et détection d’open palm.
+- **Lissage** : suivi de la position du centre de masse via un filtre de Kalman 2D.
+- **Contrôle système** : simulation de la souris avec X11/XTest sur Linux, et support de base du pointeur via ApplicationServices sur macOS.
 
 ## 📂 Structure du projet
 ```text
 Aura/
-├── CMakeLists.txt      # Configuration du build
-├── include/            # Headers (.hpp)
-├── src/                # Sources (.cpp)
-├── scripts/            # Scripts de build et lancement
-└── assets/             # Ressources et config
+├── CMakeLists.txt
+├── include/
+│   └── Aura/
+│       ├── Core/
+│       │   └── KalmanFilter.hpp
+│       ├── Input/
+│       │   └── Controller.hpp
+│       └── Vision/
+│           ├── Camera.hpp
+│           └── HandTracker.hpp
+├── scripts/
+│   ├── aura.sh
+│   └── build.sh
+└── src/
+    ├── main.cpp
+    ├── Core/
+    │   └── KalmanFilter.cpp
+    ├── Input/
+    │   └── Controller.cpp
+    └── Vision/
+        ├── Camera.cpp
+        └── HandTracker.cpp
 ```
 
 ## 🛠️ Prérequis
-- **Compilateur** : g++ (>=13 recommandé)
 - **Outils** : CMake
-- **Librairies** : OpenCV 4.x, X11, Xtst
+- **Librairies** : OpenCV 4.x
+- **Système** : macOS ou Linux
 
-**Installation rapide (Ubuntu/Debian) :**
+### Installation recommandée
+- macOS (Homebrew) :
 ```bash
-sudo apt update && sudo apt install libopencv-dev build-essential cmake libx11-dev libxtst-dev
+brew install cmake opencv
+```
+- Ubuntu/Debian :
+```bash
+sudo apt update && sudo apt install libopencv-dev build-essential cmake
 ```
 
 ## 🔨 Compilation & Exécution
-Le projet utilise des scripts simplifiés à la racine :
 ```bash
-./scripts/build.sh          # Compiler le projet
-./scripts/build.sh fclean    # Nettoyer tout le projet
-./scripts/aura.sh           # Lancer l'application (fix LD_PRELOAD)
+./scripts/build.sh
+./aura
+```
+
+### Options
+- `--no-input` : désactive la simulation de souris même si l’API est disponible
+- `--verbose` : affiche le statut de détection en temps réel
+- `--help` : affiche l’aide
+
+Si CMake ne trouve pas OpenCV automatiquement, exportez le chemin :
+```bash
+export OpenCV_DIR="/opt/homebrew/opt/opencv/lib/cmake/opencv4"
+./scripts/build.sh
 ```
 
 ## 📝 Notes
-Si vous utilisez VS Code (version Snap), utilisez impérativement ```./scripts/aura.sh``` pour éviter les conflits de bibliothèques système.
+- La version actuelle est un prototype de calibration HSV.
+- L’architecture est prête pour ajouter une détection de contours, le traitement de gestes et l’émission de commandes.
 
 ## ⚖️ Licence
 Distribué sous licence MIT.
