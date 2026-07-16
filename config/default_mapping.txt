@@ -1,0 +1,52 @@
+# AURA — Mapping gestes → actions
+# Modifiable sans recompiler. Rechargé à chaque lancement.
+#
+# Format : GESTURE = ACTION [PARAM1 [PARAM2 ...]]
+#
+# ─────────────────────────────────────────────────────────────────────────────
+#
+#  LOGIQUE : le doigt fait le sens
+#
+#   Index seul          →  curseur (naviguer)
+#   Paume ouverte       →  curseur (naviguer, main détendue)
+#   Index + pouce       →  clic gauche          ← PINCH
+#   Majeur + pouce      →  clic droit           ← PINCH_MIDDLE
+#   Index+majeur+pouce  →  double-clic          ← PINCH_DOUBLE
+#   Push vers caméra    →  clic gauche          ← ZTAP (alternatif naturel)
+#   Poing maintenu      →  drag                 ← géré en dur
+#   2 doigts maintenus  →  scroll continu       ← géré en dur
+#   Balayage haut/bas   →  scroll rapide
+#   Balayage gauche/droit → navigation browser
+#
+#  Les autres poses (THREE_FINGERS, FOUR_FINGERS, PINCH_RING, etc.)
+#  sont à NONE — trop imprécis ou trop difficiles pour une action fiable.
+#  Tu peux les assigner si tu trouves un usage qui te convient.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Navigation (curseur suit la main) ────────────────────────────────────────
+OPEN_PALM       = NONE   # main détendue ouverte
+POINT           = NONE   # index seul levé
+
+# ── Clics ────────────────────────────────────────────────────────────────────
+PINCH           = MOUSE_CLICK LEFT          # index + pouce → clic gauche
+PINCH_MIDDLE    = MOUSE_CLICK RIGHT         # majeur + pouce → clic droit
+PINCH_DOUBLE    = MOUSE_DOUBLE_CLICK LEFT   # index + majeur + pouce → double-clic
+ZTAP            = MOUSE_CLICK LEFT          # push vers caméra → clic gauche
+
+# ── Scroll rapide (swipes) ───────────────────────────────────────────────────
+SWIPE_UP        = SCROLL UP 5
+SWIPE_DOWN      = SCROLL DOWN 5
+
+# ── Navigation browser ───────────────────────────────────────────────────────
+SWIPE_LEFT      = KEY_COMBO ALT LEFT
+SWIPE_RIGHT     = KEY_COMBO ALT RIGHT
+
+# ── Poses non utilisées (NONE = aucune action) ───────────────────────────────
+# Décommente et assigne si tu veux les utiliser.
+FIST            = NONE   # réservé drag (géré en dur, ce bind n'a pas d'effet)
+THREE_FINGERS   = NONE   # difficile à déclencher intentionnellement
+FOUR_FINGERS    = NONE   # libre
+PINCH_RING      = NONE   # libre
+PINCH_PINKY     = NONE   # libre
+PINCH_SIDE      = NONE   # libre
