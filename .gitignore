@@ -48,3 +48,9 @@
 # Binary files
 /build/aura
 /aura
+
+# Fichiers locaux non versionnés
+.context/
+*.swp
+*.swo
+AURA_CDC.pdf
