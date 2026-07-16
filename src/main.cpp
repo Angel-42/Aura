@@ -1,38 +1,64 @@
-/**
- * @ Author: @Angel-42
- * @ Create Time: 2026-01-22 15:47:53
- * @ Modified by: Your name
- * @ Modified time: 2026-01-22 16:20:06
- * @ Description:
- */
-
+#include "Aura/App/AuraRunner.hpp"
 #include <iostream>
-#include <opencv2/opencv.hpp>
+#include <string>
+#include <vector>
 
-int main(void) {
-    cv::VideoCapture cap(0);
+static void printHelp(const std::string& prog) {
+    std::cout
+        << "Usage: " << prog << " [options]\n\n"
+        << "Options:\n"
+        << "  --help              Affiche cette aide\n"
+        << "  --no-input          Désactive la simulation clavier/souris\n"
+        << "  --verbose           Affiche le geste détecté en temps réel\n"
+        << "  --debug             Fenêtres OpenCV + trackbars HSV\n"
+        << "  --camera <id>       Index de la caméra (défaut: 0)\n"
+        << "  --load-calib <nom>  Charge le preset de calibration\n"
+        << "  --save-calib <nom>  Lance le wizard et sauvegarde sous <nom>\n"
+        << "  --auto-calib        Calibration automatique\n\n"
+        << "Sensibilité curseur :\n"
+        << "  --speed <x>         Multiplicateur de vitesse (défaut: 1.5, ex: 2.0)\n"
+        << "  --deadzone <x>      Zone morte en fraction de frame (défaut: 0.02, ex: 0.03)\n"
+        << "  --absolute          Mode absolu : main mappe directement l'écran\n\n"
+        << "Raccourcis en mode --debug :\n"
+        << "  s  Sauvegarder la calibration courante\n"
+        << "  q  Quitter\n";
+}
 
-    if (!cap.isOpened()) {
-        std::cerr << "Error: Could not open camera." << std::endl;
-        return -1;
+int main(int argc, char* argv[]) {
+    std::vector<std::string> args(argv + 1, argv + argc);
+
+    Aura::App::RunnerOptions opts;
+
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const auto& a = args[i];
+        if (a == "--help" || a == "-h") {
+            printHelp(argv[0]);
+            return 0;
+        }
+        if (a == "--no-input")    { opts.inputEnabled = false; continue; }
+        if (a == "--verbose")     { opts.verbose      = true;  continue; }
+        if (a == "--debug")       { opts.debug        = true;  continue; }
+        if (a == "--auto-calib")  { opts.autoCalib    = true;  continue; }
+        if (a == "--absolute")    { opts.absolute     = true;  continue; }
+        if (a == "--camera" && i + 1 < args.size()) {
+            opts.cameraDevice = std::stoi(args[++i]); continue;
+        }
+        if (a == "--speed" && i + 1 < args.size()) {
+            opts.speed = std::stof(args[++i]); continue;
+        }
+        if (a == "--deadzone" && i + 1 < args.size()) {
+            opts.deadzone = std::stof(args[++i]); continue;
+        }
+        if (a == "--load-calib" && i + 1 < args.size()) {
+            opts.loadCalib = args[++i]; continue;
+        }
+        if (a == "--save-calib" && i + 1 < args.size()) {
+            opts.saveCalib = args[++i]; continue;
+        }
+        std::cerr << "[main] Option inconnue : " << a << "\n";
     }
 
-    cv::Mat frame;
-    std::cout << "Press 'q' to exit." << std::endl;
-    while (true) {
-        cap >> frame;
-        if (frame.empty()) {
-            std::cerr << "Error: Could not read frame." << std::endl;
-            break;
-        }
-
-        cv::imshow("Camera Feed", frame);
-
-        if (cv::waitKey(30) == 'q') {
-            break;
-        }
-    }
-    cap.release();
-    cv::destroyAllWindows();
+    Aura::App::AuraRunner runner(std::move(opts));
+    runner.run();
     return 0;
 }
