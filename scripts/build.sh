@@ -8,7 +8,13 @@ function build() {
     echo "Building Aura..."
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR"
-    cmake -DOpenCV_DIR=/usr/lib/x86_64-linux-gnu/cmake/opencv4 ..
+
+    if [[ -n "$OpenCV_DIR" ]]; then
+        cmake -DOpenCV_DIR="$OpenCV_DIR" ..
+    else
+        cmake ..
+    fi
+
     make
     ls -la
     cp "$AURA_EXEC" ../"$AURA_EXEC"
@@ -35,6 +41,9 @@ function help() {
     echo "  clean   : Supprime le dossier de build"
     echo "  fclean  : clean + supprime l'exécutable principal"
     echo "  help    : Affiche cette aide"
+    echo ""
+    echo "Pour macOS avec Homebrew, exportez le chemin OpenCV si nécessaire :"
+    echo "  export OpenCV_DIR=\"/opt/homebrew/opt/opencv/lib/cmake/opencv4\""
 }
 
 case "$1" in
