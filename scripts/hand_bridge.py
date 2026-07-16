@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """
 AURA Hand Bridge — MediaPipe Tasks API (v0.10+).
-Détecte les 21 landmarks de la main et les envoie sur stdout.
+Détecte jusqu'à 2 mains et envoie leurs landmarks sur stdout.
 
-Protocole stdout (une ligne par frame) :
-  FOUND <x0> <y0> <z0> ... <x20> <y20> <z20>   (landmarks normalisés [0,1])
-  NONE
+Protocole stdout (par frame) :
+  Avec mains détectées :
+    HAND LEFT  <x0> <y0> <z0> ... <x20> <y20> <z20>
+    HAND RIGHT <x0> <y0> <z0> ... <x20> <y20> <z20>
+    FRAME_END
+  Sans main :
+    NONE
+  Fermeture :
+    QUIT
 
 Indices MediaPipe :
   0=Wrist  4=ThumbTIP  8=IndexTIP  12=MiddleTIP  16=RingTIP  20=PinkyTIP
@@ -47,13 +53,20 @@ HAND_CONNECTIONS = [
 ]
 FINGERTIP_IDS = [4, 8, 12, 16, 20]
 
-def draw_skeleton(frame, landmarks_norm):
+HAND_COLORS = {
+    "LEFT":    (0,  210, 255),   # orange  (BGR)
+    "RIGHT":   (255, 80,  50),   # bleu    (BGR)
+    "UNKNOWN": (180, 180, 180),
+}
+
+def draw_skeleton(frame, landmarks_norm, side="UNKNOWN"):
     h, w = frame.shape[:2]
     pts = [(int(lm[0]*w), int(lm[1]*h)) for lm in landmarks_norm]
+    bone_color = HAND_COLORS.get(side, HAND_COLORS["UNKNOWN"])
 
     # Os
     for a, b in HAND_CONNECTIONS:
-        cv2.line(frame, pts[a], pts[b], (0, 210, 255), 2, cv2.LINE_AA)
+        cv2.line(frame, pts[a], pts[b], bone_color, 2, cv2.LINE_AA)
 
     # Tous les noeuds
     for i, (px, py) in enumerate(pts):
@@ -63,7 +76,7 @@ def draw_skeleton(frame, landmarks_norm):
         cv2.circle(frame, (px, py), r, (255, 255, 255), 1, cv2.LINE_AA)
 
     # Paume (wrist)
-    cv2.circle(frame, pts[0], 10, (0, 140, 255), -1, cv2.LINE_AA)
+    cv2.circle(frame, pts[0], 10, bone_color, -1, cv2.LINE_AA)
     cv2.circle(frame, pts[0], 10, (255, 255, 255), 2, cv2.LINE_AA)
 
 def main():
@@ -84,7 +97,7 @@ def main():
     opts = mpv.HandLandmarkerOptions(
         base_options=base_opts,
         running_mode=mpv.RunningMode.VIDEO,
-        num_hands=1,
+        num_hands=2,
         min_hand_detection_confidence=0.60,
         min_hand_presence_confidence=0.55,
         min_tracking_confidence=0.55,
@@ -115,19 +128,28 @@ def main():
         result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
         if result.hand_landmarks:
-            lm_list = result.hand_landmarks[0]  # premier main
-            coords = []
-            lm_norm = []
-            for lm in lm_list:
-                coords += [f"{lm.x:.5f}", f"{lm.y:.5f}", f"{lm.z:.5f}"]
-                lm_norm.append((lm.x, lm.y, lm.z))
-            print("FOUND " + " ".join(coords), flush=True)
+            for i, lm_list in enumerate(result.hand_landmarks):
+                # MediaPipe donne la latéralité depuis la perspective de la personne
+                side = "UNKNOWN"
+                if result.handedness and i < len(result.handedness):
+                    side = result.handedness[i][0].category_name.upper()  # "LEFT" ou "RIGHT"
 
-            if show_window:
-                draw_skeleton(frame, lm_norm)
-                cv2.putText(frame, "Hand OK", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.75,
-                            (50, 230, 50), 2, cv2.LINE_AA)
+                coords = []
+                lm_norm = []
+                for lm in lm_list:
+                    coords += [f"{lm.x:.5f}", f"{lm.y:.5f}", f"{lm.z:.5f}"]
+                    lm_norm.append((lm.x, lm.y, lm.z))
+                print(f"HAND {side} " + " ".join(coords), flush=True)
+
+                if show_window:
+                    draw_skeleton(frame, lm_norm, side)
+                    label = f"[{side}]"
+                    cx = int(lm_norm[0][0] * frame.shape[1])
+                    cy = max(20, int(lm_norm[0][1] * frame.shape[0]) - 20)
+                    cv2.putText(frame, label, (cx, cy),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.65,
+                                HAND_COLORS.get(side, (200,200,200)), 2, cv2.LINE_AA)
+            print("FRAME_END", flush=True)
         else:
             print("NONE", flush=True)
             if show_window:

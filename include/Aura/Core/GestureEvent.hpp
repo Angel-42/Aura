@@ -49,8 +49,11 @@ inline std::string gestureName(GestureType t) {
     }
 }
 
+enum class HandSide { UNKNOWN, LEFT, RIGHT };
+
 struct GestureEvent {
     GestureType     type       = GestureType::NONE;
+    HandSide        side       = HandSide::UNKNOWN;
     cv::Point2f     position   = {0.f, 0.f};  // normalisé [0,1]
     float           confidence = 0.f;
     std::chrono::steady_clock::time_point timestamp = std::chrono::steady_clock::now();

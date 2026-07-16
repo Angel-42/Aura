@@ -2,159 +2,232 @@
 
 ## Objectif du projet
 
-AURA (Abstraction de Contrôle par Vision Artificielle) est un **framework C++** qui transforme le flux vidéo d'une webcam en commandes système en temps réel. But : remplacer clavier/souris par la **reconnaissance gestuelle des mains** — utilisable dans des jeux, applis, scripts, etc.
+AURA (Abstraction de Contrôle par Vision Artificielle) est un **framework C++20** qui transforme le flux vidéo d'une webcam en commandes système en temps réel. But : remplacer clavier/souris par la **reconnaissance gestuelle des mains** — utilisable dans des jeux, applis, scripts, etc.
 
-Pipeline cible : `Capture vidéo → Traitement image → Analyse géométrique → Simulation d'input système`
+Pipeline cible : `Capture vidéo → Détection landmarks → GestureDetector → GestureEvent → Mapper → Controller`
 
-## Architecture cible (CDC §2) — Producteur-Consommateur découplé
+## Architecture — Producteur-Consommateur découplé
 
 ```
-[AURA Core]  → génère des GestureEvent abstraits (GESTURE_PINCH, GESTURE_CLICK, etc.)
-     ↓
-[AURA Mapper] → lit un fichier JSON/config et lie geste → action (sans recompiler)
-     ↓
-[AURA Client] → consomme les événements via une EventQueue thread-safe
+[Camera / HandTracker]  → DetectionResult (landmarks normalisés, position, aire)
+         ↓
+[GestureDetector]       → GestureEvent {type, position, side(LEFT|RIGHT)}
+         ↓
+[ActivationGuard]       → filtre les faux positifs (main stable avant d'agir)
+         ↓
+[Mapper]                → lit config/default_mapping.txt, lie geste → Action
+         ↓
+[Controller]            → moveMouse / click / scroll / keyPress / keyCombo
 ```
 
-**Principe clé :** le Core ne connaît pas la souris/clavier. Le Mapper fait le pont. Le Client (jeu, script) consomme. Cette séparation rend l'outil réutilisable pour n'importe quel usage.
+**Principe clé :** le Core ne connaît pas la souris/clavier. Le Mapper fait le pont. La séparation rend l'outil réutilisable pour n'importe quel usage.
 
-## Stack technique (CDC §3)
+## Stack technique
 
-| Composant       | Technologie                                  |
-|-----------------|----------------------------------------------|
-| Langage         | **C++20** (CMakeLists a C++17 — à corriger)  |
-| Vision          | **OpenCV 4.x** + **MediaPipe** (non intégré) |
-| Input système   | **X11/Xtst** (Linux), **CGEvent** (macOS)    |
-| Demo app        | **SFML** (non commencé)                      |
-| Build           | **CMake** modulaire                          |
+| Composant       | Technologie                                           |
+|-----------------|-------------------------------------------------------|
+| Langage         | **C++20**                                             |
+| Vision          | **OpenCV 4.x** + **MediaPipe Tasks** (bridge Python)  |
+| Input système   | **X11/Xtst** (Linux), **CGEvent** (macOS)             |
+| Demo app        | **SFML** (non commencé)                               |
+| Build           | **CMake** modulaire (`aura_lib` + `aura` executable)  |
+| Tests           | **GTest** (27 tests, CTest)                           |
+| CI              | **GitHub Actions** (build+test / debug / clang-format)|
 
-## État actuel du code (juin 2026)
+## État actuel du code (juillet 2026)
 
 ### CE QUI EXISTE ET FONCTIONNE
 
-| Fichier | Rôle | État |
-|---------|------|------|
-| `src/Vision/Camera.cpp` | Capture, trackbars HSV, calibration guidée/auto | Fonctionne, trop monolithique |
-| `src/Vision/HandTracker.cpp` | Détection contour + hull convexe + Kalman | Fonctionne, basique |
-| `src/Core/KalmanFilter.cpp` | Lissage 2D position (predict/update) | Propre, réutilisable |
-| `src/Input/Controller.cpp` | moveMouse + click (Linux XTest + macOS CGEvent) | Fonctionne sur les 2 plateformes |
-| `src/main.cpp` | Boucle principale, flags CLI | Trop monolithique |
+| Module | Fichiers | État |
+|--------|----------|------|
+| `Core` | `KalmanFilter`, `GestureEvent` (18 types), `EventQueue` | Propre, C++20 |
+| `Vision` | `Camera`, `HandTracker`, `Calibrator`, `GestureDetector` | Fonctionne — HSV/contours + Kalman |
+| `Input` | `Controller` (moveMouse+click+scroll+doubleClick), `Mapper` | Linux + macOS |
+| `App` | `AuraRunner` (pipeline complet), `ActivationGuard` (3 états) | OK |
+| `Config` | `CalibConfig` | Chemins `~/.aura/` gérés |
+| `Tests` | `test_kalman`, `test_gesture_detector`, `test_mapper` | 27/27 passent |
+| `CI` | `.github/workflows/ci.yml` | build+test / warnings / lint |
 
-**Calibration :** guidée (3 poses) + auto (YCrCb + fallback motion) + save/load preset. **Problème :** sauve dans `build/` → perdu au `make clean`. À déplacer vers `~/.aura/` ou `config/`.
-
-**Seul geste détecté :** open palm → left click. Détection via `convexityDefects` (≥3 défauts > 20px).
-
-### CE QUI MANQUE (vs CDC)
-
-#### Architecture (bloquant pour la réutilisabilité)
-- [ ] `GestureEvent` — enum/struct abstrait (GESTURE_PINCH, GESTURE_CLICK, GESTURE_SCROLL_UP, etc.)
-- [ ] `EventQueue<GestureEvent>` — file thread-safe (std::queue + mutex + cv)
-- [ ] **AURA Mapper** — fichier JSON qui lie un geste à une action (ex: `"GESTURE_PINCH": "LEFT_CLICK"`)
-- [ ] Interface `IAuraClient` — pour découpler le consommateur
-
-#### Vision
-- [ ] **MediaPipe** non intégré — on est en HSV couleur peau seulement (fragile selon lumière)
-- [ ] `GestureDetector` — couche d'interprétation entre HandTracker (géométrie brute) et GestureEvent
-- [ ] Comptage des doigts levés (finger count → gesture mapping)
-- [ ] Pinch (pouce + index proches)
-- [ ] Swipe (vecteur de déplacement rapide)
-- [ ] Circle (trajectoire circulaire)
-
-#### Input
-- [ ] Simulation clavier (XTest KeySym / CGKeyCode)
-- [ ] Simulation scroll (molette — X11 button 4/5, macOS CGScrollWheelEvent)
-- [ ] Drag & release
-- [ ] Double-click
-
-#### Calibration (ton idée : premier lancement)
-- [ ] Check au démarrage si `~/.aura/calib_default.txt` existe → si non, lancer wizard automatiquement
-- [ ] Stocker les calibrations dans `~/.aura/` (pas dans `build/`)
-- [ ] `CalibConfig` class — gère les chemins, lecture/écriture indépendamment de Camera
-
-#### Demo / Tests
-- [ ] App SFML de démo (DemoGame)
-- [ ] Tests unitaires (au minimum KalmanFilter et GestureDetector)
-
-## Problèmes structurels à corriger dans le refactor
-
-1. **`Camera` fait trop de choses** : capture + UI (trackbars/windows) + calibration → à séparer
-2. **`HSVRange` dans `Camera.hpp`** mais utilisé par `HandTracker` → créer `include/Aura/Vision/Types.hpp`
-3. **Calibration path hardcodé `build/`** → `~/.aura/calib_<name>.txt`
-4. **Pas de `GestureEvent`** → tout le raisonnement gestuel est dans main.cpp avec des `bool`
-5. **C++17 dans CMakeLists** au lieu de C++20 (CDC §3)
-6. **Pas de séparation Vision / Gesture** : HandTracker fait détection ET interprétation
-
-## Structure cible pour le refactor
+### Gestes reconnus (GestureType enum — 18 types)
 
 ```
-include/Aura/
-├── Core/
-│   ├── KalmanFilter.hpp     ✓ OK
-│   ├── GestureEvent.hpp     ← à créer (enum GestureType + struct GestureEvent)
-│   └── EventQueue.hpp       ← à créer (template thread-safe queue)
-├── Vision/
-│   ├── Types.hpp            ← à créer (HSVRange, CalibData, DetectionResult)
-│   ├── Camera.hpp           ← à simplifier (capture seule, sans UI)
-│   ├── Calibrator.hpp       ← à extraire de Camera (guidée + auto + save/load)
-│   ├── HandTracker.hpp      ✓ à garder, + intégration MediaPipe future
-│   └── GestureDetector.hpp  ← à créer (contour → GestureEvent)
-├── Input/
-│   ├── Controller.hpp       ✓ à étendre (keyboard + scroll)
-│   └── Mapper.hpp           ← à créer (JSON config → gesture/action binding)
-└── Config/
-    └── CalibConfig.hpp      ← à créer (gestion ~/.aura/)
-
-src/ — mirrors include/
-config/
-└── default_mapping.json     ← à créer (mapping par défaut)
-demo/                        ← à créer (SFML DemoGame)
-tests/                       ← à créer
+Navigation  : OPEN_PALM, POINT, NONE
+Clics       : PINCH (index), PINCH_MIDDLE, PINCH_RING, PINCH_PINKY,
+              PINCH_DOUBLE, PINCH_SIDE, ZTAP
+Actions main: FIST (drag 20 frames), TWO_FINGERS (scroll continu),
+              THREE_FINGERS, FOUR_FINGERS
+Swipes      : SWIPE_LEFT, SWIPE_RIGHT, SWIPE_UP, SWIPE_DOWN
 ```
 
-## Calibration au premier lancement
+### Mapping actuel (`config/default_mapping.txt`)
 
-Logique à implémenter dans `main.cpp` ou un `AppRunner` :
+```
+OPEN_PALM     = NONE           # navigation souris
+POINT         = NONE           # navigation souris
+PINCH         = MOUSE_CLICK LEFT
+PINCH_MIDDLE  = MOUSE_CLICK RIGHT
+PINCH_DOUBLE  = MOUSE_DOUBLE_CLICK LEFT
+ZTAP          = MOUSE_CLICK LEFT
+SWIPE_UP      = SCROLL UP 5
+SWIPE_DOWN    = SCROLL DOWN 5
+SWIPE_LEFT    = KEY_COMBO ALT LEFT
+SWIPE_RIGHT   = KEY_COMBO ALT RIGHT
+```
 
+### Cursor mode
+
+- **Relatif** (défaut) : `virtualCursor_` accumulé avec deadzone + speed multiplier
+- **Absolu** : `--absolute` flag en CLI
+- **Freeze** : curseur gelé pendant les gestes d'action (seuls OPEN_PALM/POINT/NONE bougent)
+- **Mirror** : X inversé (`frameW - 1 - frameX`) pour que main droite = curseur droite
+
+---
+
+## CE QUI MANQUE (priorité décroissante)
+
+### 1. Simulation clavier (bloquant — bindings non exécutés)
+
+`Controller` n'implémente pas encore `keyPress` / `keyCombo`. Les bindings
+`SWIPE_LEFT = KEY_COMBO ALT LEFT` sont parsés par le Mapper mais ignorés à l'exécution.
+
+À implémenter dans `src/Input/Controller.cpp` :
+- Linux : `XTestFakeKeyEvent` avec `XKeysymToKeycode`
+- macOS : `CGEventCreateKeyboardEvent` + `CGEventSetFlags` pour les modifiers
+- Modifiers supportés : CTRL, SHIFT, ALT, META
+
+### 2. MediaPipe (critique pour la fiabilité)
+
+Actuellement : HSV couleur peau — fragile selon lumière/fond.  
+`scripts/hand_bridge.py` + `models/` existent mais ne sont pas intégrés dans AuraRunner.
+
+Plan d'intégration :
+- `AuraRunner` lance `hand_bridge.py` en subprocess (popen)
+- Lit les landmarks JSON sur stdout (21 points normalisés par main)
+- Remplace `HandTracker` comme source de `DetectionResult`
+- Fallback HSV si le bridge échoue ou n'est pas disponible
+
+### 3. Support deux mains simultanées ← NOUVELLE EXIGENCE
+
+**Objectif :** utiliser les deux mains en parallèle — navigation + actions indépendantes,
+et à terme, langage des signes (combinaisons bimanuelles).
+
+#### Changements architecturaux nécessaires
+
+**`HandSide` dans `GestureEvent.hpp` :**
 ```cpp
-CalibConfig cfg;
-if (!cfg.defaultCalibrationExists()) {
-    // Premier lancement : wizard obligatoire
-    Calibrator calib(camera);
-    calib.runGuidedWizard("default");  // sauve dans ~/.aura/calib_default.txt
-}
-camera.loadCalibration("default");  // toujours charger depuis ~/.aura/
+enum class HandSide { UNKNOWN, LEFT, RIGHT };
+
+struct GestureEvent {
+    GestureType type;
+    HandSide    side;       // ← nouveau
+    cv::Point2f position;
+    float       confidence;
+};
 ```
 
-## Fichier de mapping (AURA Mapper) — concept cible
-
-```json
-// ~/.aura/mapping.json ou config/default_mapping.json
-{
-  "GESTURE_OPEN_PALM": { "action": "MOUSE_CLICK", "button": "LEFT" },
-  "GESTURE_PINCH":     { "action": "MOUSE_CLICK", "button": "LEFT" },
-  "GESTURE_FIST":      { "action": "KEY_PRESS", "key": "SPACE" },
-  "GESTURE_TWO_FINGERS_UP": { "action": "MOUSE_SCROLL", "direction": "UP", "amount": 3 },
-  "GESTURE_SWIPE_LEFT": { "action": "KEY_PRESS", "key": "LEFT" }
-}
+**`DetectionResult` dans `Types.hpp` :**
+```cpp
+struct DetectionResult {
+    bool        found;
+    HandSide    side;       // ← nouveau (MediaPipe donne la latéralité)
+    LandmarkData landmarks;
+    cv::Point2f smoothedPoint;
+    float       area;
+};
 ```
+
+**`AuraRunner` — deux machines d'état indépendantes :**
+```cpp
+// AuraRunner traite un vecteur de résultats (0, 1 ou 2 mains)
+void processFrame(const std::vector<DetectionResult>& hands, cv::Mat& frame);
+
+// État séparé par main
+struct HandState {
+    bool isDragging = false;
+    int  fistFrameCount = 0;
+    bool twoFingerScrollActive = false;
+    int  twoFingerHoldFrames = 0;
+    float lastScrollPosY = 0.f;
+    float scrollAccumulator = 0.f;
+    cv::Point2f virtualCursor;
+    ActivationGuard guard;
+};
+std::array<HandState, 2> handStates_; // [0]=LEFT, [1]=RIGHT
+```
+
+**Threading :** MediaPipe retourne les 2 mains dans un seul appel d'inférence.
+Le traitement des deux `HandState` peut se faire séquentiellement (simple)
+ou en parallèle avec `std::thread` / `std::async` (gain marginal, à faire après que
+le mode mono-main soit validé en prod).
+
+**Mapper — préfixe de main optionnel :**
+```
+# Sans préfixe = s'applique aux deux mains
+PINCH         = MOUSE_CLICK LEFT
+
+# Avec préfixe = spécifique à une main
+LEFT_OPEN_PALM  = MOUSE_MOVE      # main gauche = déplace souris
+RIGHT_PINCH     = MOUSE_CLICK LEFT
+RIGHT_FIST      = KEY_PRESS SPACE
+```
+
+**Couche combinatoire (Phase ultérieure — langage des signes) :**
+```cpp
+// DualGestureEvent — déclenché quand les deux mains ont un geste actif simultanément
+struct DualGestureEvent {
+    GestureType left;
+    GestureType right;
+};
+// config/dual_mapping.txt :
+// FIST + OPEN_PALM = KEY_PRESS ENTER
+// TWO_FINGERS + TWO_FINGERS = KEY_COMBO CTRL Z
+```
+
+### 4. Système de profils ("comme un clavier")
+
+Profils nommés dans `~/.aura/profiles/<name>.txt`. Option `--profile <name>` en CLI.
+Chaque profil = un fichier mapping complet. Exemples : `gaming.txt`, `browser.txt`, `default.txt`.
+
+À terme : live rebinding (appui sur touche + geste = bind immédiat), sans recompiler.
+
+### 5. Tests additionnels
+
+- Test d'intégration AuraRunner (pipeline frame-par-frame mocké)
+- Tests Controller keyboard (Linux XTest / macOS CGEvent)
+- Tests DualGestureEvent combinator (quand implémenté)
+
+### 6. Demo SFML
+
+App visuelle pour valider le pipeline end-to-end sans dépendre d'une webcam physique.
+À faire en dernier, après que le moteur soit stable.
+
+---
 
 ## Commandes build
 
 ```bash
-./scripts/build.sh          # cmake + make dans build/
-./scripts/aura.sh           # lance le binaire
+./scripts/build.sh                        # cmake + make dans build/
+./scripts/aura.sh                         # lance le binaire
 ./aura --help
-./aura --save-calib myhand  # calibration guidée + sauvegarde
-./aura --load-calib myhand  # charge preset
-./aura --auto-calibrate     # calibration auto (YCrCb)
-./aura --no-input --verbose # debug sans simulation souris
+./aura --speed 2.0 --deadzone 0.03        # cursor relatif paramétré
+./aura --absolute                         # cursor absolu
+./aura --profile gaming                   # (futur) charge ~/.aura/profiles/gaming.txt
+./aura --save-calib myhand                # calibration guidée + sauvegarde
+./aura --load-calib myhand                # charge preset
+./aura --auto-calibrate                   # calibration auto (YCrCb)
+./aura --no-input --verbose               # debug sans simulation souris
+
+# Tests
+cd build_test && ctest --output-on-failure
 ```
 
 ## Règles de développement
 
 - C++20 minimum (std::concepts, std::span si utile)
 - Pas de dépendances header-only non justifiées
-- Chaque module doit compiler et être testable indépendamment
-- La calibration ne doit jamais bloquer le démarrage (fallback valeurs par défaut HSV)
-- 30 FPS minimum en production (profiler avant d'ajouter des traitements)
-- Les fichiers de calibration vont dans `~/.aura/`, jamais dans `build/`
+- Chaque module compile et est testable indépendamment
+- La calibration ne bloque jamais le démarrage (fallback HSV par défaut)
+- 30 FPS minimum en production — profiler avant d'ajouter des traitements
+- Les fichiers utilisateur vont dans `~/.aura/`, jamais dans `build/`
+- Commits : format conventionnel `feat/fix/build/test/docs(): description`
+- Auteur des commits : Angel — **pas de co-auteur**

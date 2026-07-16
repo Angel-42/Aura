@@ -3,6 +3,17 @@
 #
 # Format : GESTURE = ACTION [PARAM1 [PARAM2 ...]]
 #
+# ── Support deux mains ───────────────────────────────────────────────────────
+# Préfixe optionnel LEFT_ ou RIGHT_ pour binder une main spécifique.
+# Sans préfixe = s'applique aux deux mains.
+#
+# Exemples :
+#   LEFT_OPEN_PALM  = NONE            # main gauche ne bouge pas le curseur
+#   RIGHT_PINCH     = MOUSE_CLICK LEFT
+#   LEFT_FIST       = KEY_PRESS SPACE  # main gauche FIST = espace
+#
+# ─────────────────────────────────────────────────────────────────────────────
+#
 # ─────────────────────────────────────────────────────────────────────────────
 #
 #  LOGIQUE : le doigt fait le sens

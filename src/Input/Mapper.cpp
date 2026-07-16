@@ -78,6 +78,18 @@ Action Mapper::parseAction(const std::string& value) {
 }
 
 // --------------------------------------------------------------------------
+// Parsing de la clé avec préfixe de main optionnel
+// --------------------------------------------------------------------------
+
+static std::pair<Core::HandSide, std::string> splitSidePrefix(const std::string& key) {
+    if (key.rfind("LEFT_", 0) == 0)
+        return {Core::HandSide::LEFT,  key.substr(5)};
+    if (key.rfind("RIGHT_", 0) == 0)
+        return {Core::HandSide::RIGHT, key.substr(6)};
+    return {Core::HandSide::UNKNOWN,   key};
+}
+
+// --------------------------------------------------------------------------
 // Chargement
 // --------------------------------------------------------------------------
 
@@ -89,12 +101,13 @@ bool Mapper::load(const std::filesystem::path& path) {
     }
 
     mapping_.clear();
+    leftMapping_.clear();
+    rightMapping_.clear();
     std::string line;
     int lineNum = 0;
 
     while (std::getline(ifs, line)) {
         ++lineNum;
-        // Ignorer commentaires et lignes vides
         auto trimmed = trim(line);
         if (trimmed.empty() || trimmed[0] == '#') continue;
 
@@ -104,12 +117,14 @@ bool Mapper::load(const std::filesystem::path& path) {
             continue;
         }
 
-        std::string key   = trim(trimmed.substr(0, sep));
-        std::string value = trim(trimmed.substr(sep + 1));
+        std::string rawKey = trim(trimmed.substr(0, sep));
+        std::string value  = trim(trimmed.substr(sep + 1));
 
-        Core::GestureType gesture = parseGesture(key);
+        auto [side, gestureKey] = splitSidePrefix(rawKey);
+
+        Core::GestureType gesture = parseGesture(gestureKey);
         if (gesture == Core::GestureType::NONE) {
-            std::cerr << "[Mapper] Unknown gesture '" << key << "' at line " << lineNum << "\n";
+            std::cerr << "[Mapper] Unknown gesture '" << rawKey << "' at line " << lineNum << "\n";
             continue;
         }
 
@@ -119,12 +134,16 @@ bool Mapper::load(const std::filesystem::path& path) {
             continue;
         }
 
-        mapping_[gesture] = action;
+        if (side == Core::HandSide::LEFT)        leftMapping_[gesture]  = action;
+        else if (side == Core::HandSide::RIGHT)  rightMapping_[gesture] = action;
+        else                                     mapping_[gesture]      = action;
     }
 
     loaded_ = true;
-    std::cout << "[Mapper] Loaded " << mapping_.size()
-              << " bindings from " << path << "\n";
+    std::cout << "[Mapper] Loaded "
+              << mapping_.size() << " generic + "
+              << leftMapping_.size() << " LEFT + "
+              << rightMapping_.size() << " RIGHT bindings from " << path << "\n";
     return true;
 }
 
@@ -142,10 +161,18 @@ bool Mapper::loadDefault() {
     return load(p);
 }
 
-Action Mapper::actionFor(Core::GestureType gesture) const {
+Action Mapper::actionFor(Core::GestureType gesture, Core::HandSide side) const {
+    // Cherche d'abord le binding côté-spécifique
+    if (side == Core::HandSide::LEFT) {
+        auto it = leftMapping_.find(gesture);
+        if (it != leftMapping_.end()) return it->second;
+    } else if (side == Core::HandSide::RIGHT) {
+        auto it = rightMapping_.find(gesture);
+        if (it != rightMapping_.end()) return it->second;
+    }
+    // Fallback : binding générique
     auto it = mapping_.find(gesture);
-    if (it == mapping_.end()) return Action{ActionType::NONE, {}};
-    return it->second;
+    return (it != mapping_.end()) ? it->second : Action{ActionType::NONE, {}};
 }
 
 } // namespace Aura::Input

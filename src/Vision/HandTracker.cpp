@@ -35,7 +35,7 @@ static bool mediapipeAvailable() {
 
 HandTracker::HandTracker()
     : bgSub_(cv::createBackgroundSubtractorMOG2(300, 25.0, false))
-    , smoother_(1e-2f, 1e-1f)
+    , smoothers_{}   // chaque KalmanFilter2D s'initialise avec ses params par défaut
 {
     if (!tryStartBridge(0)) {
         std::cerr << "[HandTracker] Bridge indisponible — mode OpenCV BGSub\n";
@@ -90,41 +90,53 @@ bool HandTracker::tryStartBridge(int cameraDevice) {
 }
 
 // --------------------------------------------------------------------------
-// Lecture d'une ligne du bridge
+// Lecture de toutes les mains d'une frame depuis le bridge
 // --------------------------------------------------------------------------
 
-bool HandTracker::readFromBridge(LandmarkData& out) {
-    if (!bridgePipe_) return false;
+std::vector<DetectionResult> HandTracker::readAllFromBridge(int fw, int fh) {
+    if (!bridgePipe_) return {};
 
-    char buf[2048];
-    if (!fgets(buf, sizeof(buf), bridgePipe_)) {
-        std::cerr << "[HandTracker] Bridge fermé\n";
-        pclose(bridgePipe_);
-        bridgePipe_ = nullptr;
-        return false;
-    }
+    std::vector<DetectionResult> results;
+    char buf[4096];
 
-    if (strncmp(buf, "NONE", 4) == 0) {
-        out.found = false;
-        return true;
-    }
-    if (strncmp(buf, "QUIT", 4) == 0) {
-        out.found = false;
-        pclose(bridgePipe_);
-        bridgePipe_ = nullptr;
-        return false;
-    }
-    if (strncmp(buf, "FOUND", 5) == 0) {
-        out.found = true;
-        char* s = buf + 6;
-        for (int i = 0; i < 21; ++i) {
-            out.pts[i].x = strtof(s, &s);
-            out.pts[i].y = strtof(s, &s);
-            out.pts[i].z = strtof(s, &s);
+    while (fgets(buf, sizeof(buf), bridgePipe_)) {
+        if (strncmp(buf, "NONE", 4) == 0) break;       // frame sans main
+
+        if (strncmp(buf, "QUIT", 4) == 0) {
+            pclose(bridgePipe_);
+            bridgePipe_ = nullptr;
+            break;
         }
-        return true;
+
+        if (strncmp(buf, "FRAME_END", 9) == 0) break;  // toutes les mains lues
+
+        if (strncmp(buf, "HAND ", 5) == 0) {
+            char* s = buf + 5;
+
+            // Latéralité : "LEFT " ou "RIGHT " ou "UNKNOWN "
+            Core::HandSide side = Core::HandSide::UNKNOWN;
+            if (strncmp(s, "LEFT ", 5) == 0)  { side = Core::HandSide::LEFT;  s += 5; }
+            else if (strncmp(s, "RIGHT ", 6) == 0) { side = Core::HandSide::RIGHT; s += 6; }
+            else if (strncmp(s, "UNKNOWN ", 8) == 0) { s += 8; }
+
+            LandmarkData lm;
+            lm.found = true;
+            for (int i = 0; i < 21; ++i) {
+                lm.pts[i].x = strtof(s, &s);
+                lm.pts[i].y = strtof(s, &s);
+                lm.pts[i].z = strtof(s, &s);
+            }
+
+            int idx = (side == Core::HandSide::RIGHT) ? 1 : 0;
+            results.push_back(landmarksToResult(lm, side, idx, fw, fh));
+        }
+        // lignes inconnues → ignorer
     }
-    return true; // ligne inconnue → ignorer
+
+    if (!bridgePipe_) return results;
+
+    lastResults_ = results;
+    return results;
 }
 
 // --------------------------------------------------------------------------
@@ -137,26 +149,26 @@ bool HandTracker::readFromBridge(LandmarkData& out) {
 // --------------------------------------------------------------------------
 
 DetectionResult HandTracker::landmarksToResult(const LandmarkData& lm,
+                                                Core::HandSide side,
+                                                int smootherIdx,
                                                 int frameW, int frameH) {
     DetectionResult r;
     r.landmarks = lm;
+    r.side      = side;
 
     if (!lm.found) {
-        r.found          = false;
-        r.smoothedPoint  = smoother_.predict();
-        lastResult_      = r;
+        r.found         = false;
+        r.smoothedPoint = smoothers_[smootherIdx].predict();
         return r;
     }
 
     r.found = true;
 
-    // Position de la paume (normalisée → pixels)
     cv::Point2f palmNorm = lm.palmCenter();
     r.rawPoint = {palmNorm.x * static_cast<float>(frameW),
                   palmNorm.y * static_cast<float>(frameH)};
-    r.smoothedPoint = smoother_.update(r.rawPoint);
+    r.smoothedPoint = smoothers_[smootherIdx].update(r.rawPoint);
 
-    // Fingertips en pixels
     constexpr int tipIds[5] = {4, 8, 12, 16, 20};
     r.fingertips.clear();
     for (int id : tipIds) {
@@ -164,8 +176,6 @@ DetectionResult HandTracker::landmarksToResult(const LandmarkData& lm,
                                 lm.pts[id].y * static_cast<float>(frameH)});
     }
 
-    // Comptage fiable des doigts étendus (index, majeur, annulaire, auriculaire)
-    // TIP.y < PIP.y  ↔  le bout du doigt est AU-DESSUS du PIP dans l'image
     constexpr int pips[4] = {6, 10, 14, 18};
     constexpr int tips[4] = {8, 12, 16, 20};
     int count = 0;
@@ -174,13 +184,11 @@ DetectionResult HandTracker::landmarksToResult(const LandmarkData& lm,
     }
     r.fingerCount = count;
 
-    // Fausse aire approximative pour ActivationGuard (basée sur la taille de la main)
-    float dx = lm.pts[0].x - lm.pts[9].x;  // wrist → milieu main
+    float dx = lm.pts[0].x - lm.pts[9].x;
     float dy = lm.pts[0].y - lm.pts[9].y;
     float handSizeNorm = std::sqrt(dx*dx + dy*dy);
     r.area = handSizeNorm * static_cast<float>(frameW) * handSizeNorm * static_cast<float>(frameH);
 
-    lastResult_ = r;
     return r;
 }
 
@@ -193,55 +201,40 @@ bool HandTracker::isReady() const {
     return initCounter_ >= kInitFrames;
 }
 
-DetectionResult HandTracker::process(const cv::Mat& frame,
-                                      const HSVRange& hsvHint,
-                                      cv::Mat& outMask) {
+std::vector<DetectionResult> HandTracker::process(const cv::Mat& frame,
+                                                   const HSVRange& hsvHint,
+                                                   cv::Mat& outMask) {
     // ---- Mode bridge MediaPipe ----
     if (bridgePipe_) {
-        outMask = cv::Mat(); // pas de masque en mode bridge
-        LandmarkData lm;
-        if (!readFromBridge(lm)) {
-            DetectionResult r;
-            r.smoothedPoint = smoother_.predict();
-            lastResult_ = r;
-            return r;
-        }
-        // Taille de frame par défaut si on n'a pas de frame C++
+        outMask = cv::Mat();
         int fw = frame.empty() ? 640 : frame.cols;
         int fh = frame.empty() ? 480 : frame.rows;
-        return landmarksToResult(lm, fw, fh);
+        return readAllFromBridge(fw, fh);
     }
 
-    // ---- Mode OpenCV fallback ----
-    DetectionResult result;
-
+    // ---- Mode OpenCV fallback (une seule main, contour) ----
     cv::Mat src = frame.empty() ? cv::Mat() : frame;
-    if (src.empty() && cap_.isOpened()) {
-        cap_ >> src;
-    }
+    if (src.empty() && cap_.isOpened()) cap_ >> src;
     if (src.empty()) {
-        result.found        = false;
-        result.smoothedPoint = smoother_.predict();
-        lastResult_         = result;
-        return result;
+        lastResults_ = {};
+        return {};
     }
 
     outMask = computeCvMask(src, hsvHint);
 
+    DetectionResult result;
+    result.side = Core::HandSide::UNKNOWN;
+
     float area = 0.f;
     if (!findLargestContour(outMask, result.contour, area)) {
-        result.found        = false;
-        result.smoothedPoint = smoother_.predict();
-        lastResult_         = result;
-        return result;
+        lastResults_ = {};
+        return {};
     }
 
     cv::Moments m = cv::moments(result.contour);
     if (m.m00 <= 1.0) {
-        result.found        = false;
-        result.smoothedPoint = smoother_.predict();
-        lastResult_         = result;
-        return result;
+        lastResults_ = {};
+        return {};
     }
 
     result.found    = true;
@@ -257,9 +250,9 @@ DetectionResult HandTracker::process(const cv::Mat& frame,
                                        static_cast<float>(bbox.height));
     result.fingerCount = static_cast<int>(result.fingertips.size());
 
-    result.smoothedPoint = smoother_.update(result.rawPoint);
-    lastResult_ = result;
-    return result;
+    result.smoothedPoint = smoothers_[0].update(result.rawPoint);
+    lastResults_ = {result};
+    return {result};
 }
 
 // --------------------------------------------------------------------------
@@ -371,66 +364,79 @@ std::vector<cv::Point2f> HandTracker::findFingertips(const std::vector<cv::Point
 // --------------------------------------------------------------------------
 
 void HandTracker::drawSkeleton(cv::Mat& frame) const {
-    if (!lastResult_.found) return;
+    static constexpr std::pair<int,int> connections[] = {
+        {0,1},{1,2},{2,3},{3,4},
+        {0,5},{5,6},{6,7},{7,8},
+        {0,9},{9,10},{10,11},{11,12},
+        {0,13},{13,14},{14,15},{15,16},
+        {0,17},{17,18},{18,19},{19,20},
+        {5,9},{9,13},{13,17},
+    };
+    static constexpr int tipIds[5] = {4, 8, 12, 16, 20};
 
-    if (lastResult_.landmarks.found) {
-        // Mode bridge : skeleton MediaPipe précis
-        const auto& lm = lastResult_.landmarks;
-        int w = frame.cols, h = frame.rows;
+    for (const auto& result : lastResults_) {
+        if (!result.found) continue;
 
-        auto pt = [&](int idx) -> cv::Point {
-            return {static_cast<int>(lm.pts[idx].x * w),
-                    static_cast<int>(lm.pts[idx].y * h)};
-        };
+        // Couleur selon la main : orange=LEFT, bleu=RIGHT, blanc=UNKNOWN
+        cv::Scalar boneColor = (result.side == Core::HandSide::LEFT)  ? cv::Scalar(0, 210, 255)
+                             : (result.side == Core::HandSide::RIGHT) ? cv::Scalar(255, 80, 50)
+                             :                                           cv::Scalar(200, 200, 200);
 
-        // Connexions
-        static constexpr std::pair<int,int> connections[] = {
-            {0,1},{1,2},{2,3},{3,4},        // Thumb
-            {0,5},{5,6},{6,7},{7,8},        // Index
-            {0,9},{9,10},{10,11},{11,12},   // Middle
-            {0,13},{13,14},{14,15},{15,16}, // Ring
-            {0,17},{17,18},{18,19},{19,20}, // Pinky
-            {5,9},{9,13},{13,17},           // Palm
-        };
-        for (auto [a,b] : connections) {
-            cv::line(frame, pt(a), pt(b), cv::Scalar(0, 210, 255), 2, cv::LINE_AA);
-        }
+        if (result.landmarks.found) {
+            // Mode bridge : skeleton précis 21 points
+            const auto& lm = result.landmarks;
+            int w = frame.cols, h = frame.rows;
+            auto pt = [&](int i) -> cv::Point {
+                return {static_cast<int>(lm.pts[i].x * w),
+                        static_cast<int>(lm.pts[i].y * h)};
+            };
+            for (auto [a, b] : connections)
+                cv::line(frame, pt(a), pt(b), boneColor, 2, cv::LINE_AA);
+            for (int i = 0; i < 21; ++i) {
+                bool isTip = false;
+                for (int t : tipIds) if (t == i) { isTip = true; break; }
+                cv::Scalar col = isTip ? cv::Scalar(0,255,100) : cv::Scalar(200,200,200);
+                int r = isTip ? 8 : 4;
+                cv::circle(frame, pt(i), r, col, -1, cv::LINE_AA);
+                cv::circle(frame, pt(i), r, {255,255,255}, 1, cv::LINE_AA);
+            }
+            cv::circle(frame, pt(0), 12, boneColor, -1, cv::LINE_AA);
+            cv::circle(frame, pt(0), 12, {255,255,255}, 2, cv::LINE_AA);
 
-        // Noeuds
-        static constexpr int tipIds[5] = {4, 8, 12, 16, 20};
-        for (int i = 0; i < 21; ++i) {
-            bool isTip = false;
-            for (int t : tipIds) if (t == i) { isTip = true; break; }
-            cv::Scalar col = isTip ? cv::Scalar(0,255,100) : cv::Scalar(200,200,200);
-            int r = isTip ? 8 : 4;
-            cv::circle(frame, pt(i), r, col, -1, cv::LINE_AA);
-            cv::circle(frame, pt(i), r, {255,255,255}, 1, cv::LINE_AA);
-        }
-        // Paume (wrist)
-        cv::circle(frame, pt(0), 12, cv::Scalar(0,140,255), -1, cv::LINE_AA);
-        cv::circle(frame, pt(0), 12, {255,255,255}, 2, cv::LINE_AA);
-    } else {
-        // Mode CV : skeleton simplifié (hull + fingertips)
-        cv::Point2f palm = lastResult_.smoothedPoint;
-        for (const auto& tip : lastResult_.fingertips) {
-            cv::line(frame, palm, tip, cv::Scalar(0,220,255), 2, cv::LINE_AA);
-        }
-        cv::circle(frame, palm, 14, cv::Scalar(0,140,255), -1, cv::LINE_AA);
-        for (const auto& tip : lastResult_.fingertips) {
-            cv::circle(frame, tip, 9, cv::Scalar(0,255,100), -1, cv::LINE_AA);
+            // Label latéralité
+            std::string label = (result.side == Core::HandSide::LEFT)  ? "L"
+                              : (result.side == Core::HandSide::RIGHT) ? "R" : "";
+            if (!label.empty()) {
+                cv::putText(frame, label, pt(0) + cv::Point(14, -14),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.7, boneColor, 2, cv::LINE_AA);
+            }
+        } else {
+            // Mode CV : skeleton simplifié
+            cv::Point2f palm = result.smoothedPoint;
+            for (const auto& tip : result.fingertips)
+                cv::line(frame, palm, tip, boneColor, 2, cv::LINE_AA);
+            cv::circle(frame, palm, 14, boneColor, -1, cv::LINE_AA);
+            for (const auto& tip : result.fingertips)
+                cv::circle(frame, tip, 9, cv::Scalar(0,255,100), -1, cv::LINE_AA);
         }
     }
 }
 
 void HandTracker::drawDebug(cv::Mat& frame) const {
-    if (!lastResult_.found) {
+    if (lastResults_.empty()) {
         cv::putText(frame, "Aucune main",
                     {10, 30}, cv::FONT_HERSHEY_SIMPLEX, 0.8,
                     cv::Scalar(0,0,255), 2, cv::LINE_AA);
         return;
     }
-    std::string info = "Doigts: " + std::to_string(lastResult_.fingerCount)
-                     + (usesBridge() ? " [MediaPipe]" : " [CV]");
+    std::string info;
+    for (const auto& r : lastResults_) {
+        if (!r.found) continue;
+        std::string side = (r.side == Core::HandSide::LEFT)  ? "L:"
+                         : (r.side == Core::HandSide::RIGHT) ? "R:" : "";
+        info += side + std::to_string(r.fingerCount) + "f  ";
+    }
+    info += usesBridge() ? "[MediaPipe]" : "[CV]";
     cv::putText(frame, info, {10, 30}, cv::FONT_HERSHEY_SIMPLEX, 0.7,
                 cv::Scalar(0,255,0), 2, cv::LINE_AA);
 }

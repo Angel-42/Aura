@@ -9,6 +9,7 @@
 #include "Aura/Input/Controller.hpp"
 #include "Aura/Input/Mapper.hpp"
 #include "Aura/Config/CalibConfig.hpp"
+#include <array>
 #include <chrono>
 
 namespace Aura::App {
@@ -23,9 +24,28 @@ struct RunnerOptions {
     bool autoCalib    = false;
 
     // Sensibilité curseur
-    float speed    = 1.5f;   // multiplicateur de vitesse (mode relatif)
-    float deadzone = 0.02f;  // zone morte en fraction de frame (évite le tremblement)
-    bool  absolute = false;  // true = main mappe directement l'écran (ancien comportement)
+    float speed    = 1.5f;
+    float deadzone = 0.02f;
+    bool  absolute = false;
+};
+
+// État indépendant par main — machine d'état drag/scroll/activation.
+struct HandState {
+    Vision::GestureDetector detector{};
+    ActivationGuard         guard{};
+
+    Core::GestureType lastGesture = Core::GestureType::NONE;
+    std::chrono::steady_clock::time_point lastActionTime{};
+
+    cv::Point2f lastHandPos = {-1.f, -1.f};  // pour le delta curseur relatif
+
+    bool isDragging     = false;
+    int  fistFrameCount = 0;
+
+    bool  twoFingerScrollActive = false;
+    int   twoFingerHoldFrames   = 0;
+    float lastScrollPosY        = 0.f;
+    float scrollAccumulator     = 0.f;
 };
 
 class AuraRunner {
@@ -40,33 +60,21 @@ private:
     Config::CalibConfig                  calibConfig_;
     Vision::Camera                       camera_;
     Vision::HandTracker                  tracker_;
-    Vision::GestureDetector              detector_;
     Core::EventQueue<Core::GestureEvent> queue_;
     Input::Mapper                        mapper_;
     Input::Controller                    controller_;
-    ActivationGuard                      activation_;
 
-    Vision::HSVRange  hsvRange_;
-    Core::GestureType lastGesture_    = Core::GestureType::NONE;
-    std::chrono::steady_clock::time_point lastActionTime_{};
+    Vision::HSVRange hsvRange_;
 
-    // Curseur relatif
-    cv::Point2f lastHandPos_   = {-1.f, -1.f};  // -1 = non initialisé
+    // [0] = LEFT / UNKNOWN,  [1] = RIGHT
+    std::array<HandState, 2> handStates_;
+
+    // Curseur virtuel partagé (une seule position physique de souris)
     cv::Point2f virtualCursor_ = {0.f, 0.f};
 
-    // Drag (FIST maintenu)
-    bool isDragging_     = false;
-    int  fistFrameCount_ = 0;
-    static constexpr int kDragActivateFrames = 20;
-
-    // Scroll continu (TWO_FINGERS maintenu)
-    bool  twoFingerScrollActive_ = false;
-    int   twoFingerHoldFrames_   = 0;
-    float lastScrollPosY_        = 0.f;
-    float scrollAccumulator_     = 0.f;
-    static constexpr int kScrollActivateFrames = 10;  // ~0.33s @ 30fps
-
-    static constexpr int kActionCooldownMs = 350;
+    static constexpr int kDragActivateFrames   = 20;
+    static constexpr int kScrollActivateFrames = 10;
+    static constexpr int kActionCooldownMs     = 350;
 
     // Initialisation
     bool init();
@@ -74,25 +82,31 @@ private:
     void setupMapping();
     void setupDebugUI();
 
-    // Boucle principale — traitement par frame
+    // Boucle principale
     void processFrame(const cv::Mat& frame);
-    void handleMovement(const Vision::DetectionResult& result, int frameW, int frameH,
-                        Core::GestureType gesture);
-    void handleDrag(Core::GestureType gesture);
-    void releaseDrag();
-    void handleTwoFingerScroll(Core::GestureType gesture, const Vision::DetectionResult& result);
-    void renderDebugOverlay(cv::Mat& frame, bool canAct, const Core::GestureEvent& event);
+    void processHand(HandState& hs, const Vision::DetectionResult& result,
+                     int frameW, int frameH);
 
-    // Dispatch geste → action
-    void dispatchEvent(const Core::GestureEvent& event, int frameW, int frameH);
+    // Handlers par main
+    void handleMovement(HandState& hs, const Vision::DetectionResult& result,
+                        int frameW, int frameH, Core::GestureType gesture);
+    void handleDrag(HandState& hs, Core::GestureType gesture);
+    void releaseDrag(HandState& hs);
+    void handleTwoFingerScroll(HandState& hs, Core::GestureType gesture,
+                               const Vision::DetectionResult& result);
+
+    // Dispatch
+    void dispatchEvent(HandState& hs, const Core::GestureEvent& event,
+                       int frameW, int frameH);
     void executeAction(const Input::Action& action,
                        const cv::Point2f& normPos, int frameW, int frameH);
 
     // Debug UI
     bool debugUICreated_ = false;
+    void renderDebugOverlay(cv::Mat& frame,
+                            const std::vector<Vision::DetectionResult>& results);
     void showDebug(cv::Mat& frame, const cv::Mat& mask,
-                   const Vision::DetectionResult& result,
-                   const Core::GestureEvent& event);
+                   const std::vector<Vision::DetectionResult>& results);
     static void trackbarCb(int, void* ud);
     void updateRangeFromTrackbars();
 };

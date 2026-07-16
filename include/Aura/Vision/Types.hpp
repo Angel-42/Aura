@@ -1,4 +1,5 @@
 #pragma once
+#include "Aura/Core/GestureEvent.hpp"  // for HandSide
 #include <opencv2/opencv.hpp>
 #include <array>
 #include <vector>
@@ -36,8 +37,9 @@ struct LandmarkData {
 };
 
 struct DetectionResult {
-    bool            found         = false;
-    cv::Point2f     rawPoint      = {0.f, 0.f};
+    bool              found         = false;
+    Core::HandSide    side          = Core::HandSide::UNKNOWN;
+    cv::Point2f       rawPoint      = {0.f, 0.f};
     cv::Point2f     smoothedPoint = {0.f, 0.f};
     float           area          = 0.f;
     float           hullArea      = 0.f;

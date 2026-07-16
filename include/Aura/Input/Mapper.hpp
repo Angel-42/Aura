@@ -32,11 +32,15 @@ public:
     bool load(const std::filesystem::path& path);
     bool loadDefault();  // cherche config/default_mapping.txt à côté du binaire
 
-    [[nodiscard]] Action actionFor(Core::GestureType gesture) const;
+    // Cherche d'abord un binding spécifique à 'side', puis le binding générique.
+    [[nodiscard]] Action actionFor(Core::GestureType gesture,
+                                   Core::HandSide side = Core::HandSide::UNKNOWN) const;
     [[nodiscard]] bool   isLoaded() const { return loaded_; }
 
 private:
-    std::unordered_map<Core::GestureType, Action> mapping_;
+    std::unordered_map<Core::GestureType, Action> mapping_;       // sans préfixe
+    std::unordered_map<Core::GestureType, Action> leftMapping_;   // préfixe LEFT_
+    std::unordered_map<Core::GestureType, Action> rightMapping_;  // préfixe RIGHT_
     bool loaded_ = false;
 
     static Action          parseAction(const std::string& value);

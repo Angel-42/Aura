@@ -19,22 +19,19 @@ AuraRunner::AuraRunner(RunnerOptions opts)
 // --------------------------------------------------------------------------
 
 bool AuraRunner::init() {
-    // En mode bridge, la caméra est gérée par Python — pas besoin de camera_ C++
     if (!tracker_.usesBridge() && !camera_.isOpened()) {
         std::cerr << "[AuraRunner] Caméra inaccessible (device " << opts_.cameraDevice << ")\n";
         return false;
     }
-    // La calibration HSV n'est utile qu'en mode CV fallback
     if (!tracker_.usesBridge()) setupCalibration();
     setupMapping();
     if (opts_.debug && !tracker_.usesBridge()) setupDebugUI();
     if (tracker_.usesBridge())
-        std::cout << "[AuraRunner] Mode MediaPipe bridge — fenêtre Python active\n";
+        std::cout << "[AuraRunner] Mode MediaPipe bridge — jusqu'à 2 mains actives\n";
     return true;
 }
 
 void AuraRunner::setupCalibration() {
-    // 1. Calibration guidée demandée explicitement via --save-calib
     if (!opts_.saveCalib.empty()) {
         Vision::Calibrator calib(camera_);
         Vision::HSVRange range;
@@ -46,8 +43,6 @@ void AuraRunner::setupCalibration() {
         }
         return;
     }
-
-    // 2. Calibration auto
     if (opts_.autoCalib) {
         Vision::Calibrator calib(camera_);
         Vision::HSVRange range;
@@ -57,11 +52,7 @@ void AuraRunner::setupCalibration() {
         }
         return;
     }
-
-    // 3. Chargement d'un preset explicite
     const std::string& name = opts_.loadCalib.empty() ? "default" : opts_.loadCalib;
-
-    // 4. Premier lancement : calibration default inexistante → wizard obligatoire
     if (!calibConfig_.exists(name)) {
         std::cout << "\n╔══════════════════════════════════════════════╗\n"
                   << "║  AURA — Premier lancement détecté             ║\n"
@@ -77,21 +68,16 @@ void AuraRunner::setupCalibration() {
         }
         return;
     }
-
-    // 5. Charger le preset existant
     calibConfig_.load(name, hsvRange_);
 }
 
-void AuraRunner::setupMapping() {
-    mapper_.loadDefault();
-}
+void AuraRunner::setupMapping()  { mapper_.loadDefault(); }
 
 void AuraRunner::setupDebugUI() {
     cv::namedWindow("AURA Feed", cv::WINDOW_NORMAL);
     cv::namedWindow("AURA Mask", cv::WINDOW_NORMAL);
     cv::namedWindow("AURA Trackbars", cv::WINDOW_NORMAL);
 
-    // Trackbars HSV pour ajustement en temps réel
     cv::createTrackbar("H_min", "AURA Trackbars", nullptr, 179, trackbarCb, this);
     cv::createTrackbar("H_max", "AURA Trackbars", nullptr, 179, trackbarCb, this);
     cv::createTrackbar("S_min", "AURA Trackbars", nullptr, 255, trackbarCb, this);
@@ -130,8 +116,9 @@ void AuraRunner::run() {
     if (!init()) return;
 
     std::cout << "\n=== AURA Gesture Control ===\n";
-    std::cout << "Input : " << (opts_.inputEnabled ? "activé" : "désactivé (--no-input)") << "\n";
-    std::cout << "Debug : " << (opts_.debug ? "activé (--debug)" : "désactivé") << "\n";
+    std::cout << "Input  : " << (opts_.inputEnabled ? "activé" : "désactivé (--no-input)") << "\n";
+    std::cout << "Debug  : " << (opts_.debug ? "activé (--debug)" : "désactivé") << "\n";
+    std::cout << "Mains  : jusqu'à 2 simultanées" << (tracker_.usesBridge() ? " [MediaPipe]" : " [CV mono]") << "\n";
     if (!tracker_.usesBridge()) {
         std::cout << "\nINIT : " << Vision::HandTracker::kInitFrames
                   << " frames d'apprentissage du fond — retirez la main du cadre !\n";
@@ -141,9 +128,7 @@ void AuraRunner::run() {
     while (true) {
         cv::Mat frame;
         if (tracker_.usesBridge()) {
-            // Bridge mode : frame vide, la caméra appartient au processus Python
             processFrame(frame);
-            // 'q' dans la fenêtre Python ferme le bridge ; on vérifie si le pipe est mort
             if (!tracker_.usesBridge()) break;
             if (cv::waitKey(1) == 'q') break;
         } else {
@@ -166,67 +151,98 @@ void AuraRunner::run() {
 }
 
 // --------------------------------------------------------------------------
-// Traitement d'une frame
+// Traitement d'une frame — itère sur toutes les mains détectées
 // --------------------------------------------------------------------------
 
 void AuraRunner::processFrame(const cv::Mat& frame) {
     cv::Mat mask;
-    Vision::DetectionResult result = tracker_.process(frame, hsvRange_, mask);
+    auto results = tracker_.process(frame, hsvRange_, mask);
 
     const int frameW = frame.empty() ? 640 : frame.cols;
     const int frameH = frame.empty() ? 480 : frame.rows;
 
-    if (tracker_.isReady()) activation_.update(result);
-    const bool canAct = tracker_.isReady() && activation_.isActive();
+    // Marquer quelles mains ont été vues cette frame
+    std::array<bool, 2> seen = {false, false};
 
-    Core::GestureEvent event;
-    if (canAct) {
-        event = detector_.classify(result, frameW, frameH);
-        handleMovement(result, frameW, frameH, event.type);
-        handleDrag(event.type);
-        handleTwoFingerScroll(event.type, result);
-        // FIST et TWO_FINGERS sont gérés en dur (drag / scroll) — pas via le mapper
-        if (event.type != Core::GestureType::NONE &&
-            event.type != Core::GestureType::FIST &&
-            event.type != Core::GestureType::TWO_FINGERS) {
-            queue_.push(event);
-            dispatchEvent(event, frameW, frameH);
-        }
-    } else {
-        releaseDrag();
-        twoFingerScrollActive_ = false;
-        twoFingerHoldFrames_   = 0;
-        scrollAccumulator_     = 0.f;
-        if (activation_.isIdle()) {
-            detector_    = Vision::GestureDetector{};
-            lastGesture_ = Core::GestureType::NONE;
+    for (const auto& result : results) {
+        int idx = (result.side == Core::HandSide::RIGHT) ? 1 : 0;
+        seen[idx] = true;
+        processHand(handStates_[idx], result, frameW, frameH);
+    }
+
+    // Relâcher les ressources des mains disparues
+    for (int i = 0; i < 2; ++i) {
+        if (!seen[i]) {
+            releaseDrag(handStates_[i]);
+            handStates_[i].twoFingerScrollActive = false;
+            handStates_[i].twoFingerHoldFrames   = 0;
+            handStates_[i].scrollAccumulator     = 0.f;
         }
     }
 
     if (opts_.debug && !frame.empty()) {
         cv::Mat display = frame.clone();
-        renderDebugOverlay(display, canAct, event);
-        showDebug(display, mask, result, event);
+        renderDebugOverlay(display, results);
+        showDebug(display, mask, results);
     }
 
-    if (opts_.verbose && canAct) {
-        std::cout << "\r["
-                  << Core::gestureName(event.type) << "] "
-                  << "doigts=" << result.fingerCount
-                  << " aire=" << static_cast<int>(result.area)
-                  << " pos=(" << static_cast<int>(result.smoothedPoint.x)
-                  << "," << static_cast<int>(result.smoothedPoint.y) << ")  "
-                  << std::flush;
+    if (opts_.verbose && !results.empty()) {
+        std::cout << "\r";
+        for (const auto& r : results) {
+            std::string side = (r.side == Core::HandSide::LEFT)  ? "L"
+                             : (r.side == Core::HandSide::RIGHT) ? "R" : "?";
+            int idx = (r.side == Core::HandSide::RIGHT) ? 1 : 0;
+            Core::GestureType g = handStates_[idx].lastGesture;
+            std::cout << "[" << side << ":" << Core::gestureName(g) << " "
+                      << "f" << r.fingerCount << "] ";
+        }
+        std::cout << "     " << std::flush;
     }
 }
 
-void AuraRunner::handleMovement(const Vision::DetectionResult& result,
-                                 int frameW, int frameH,
-                                 Core::GestureType gesture) {
+void AuraRunner::processHand(HandState& hs, const Vision::DetectionResult& result,
+                              int frameW, int frameH) {
+    if (tracker_.isReady()) hs.guard.update(result);
+    const bool canAct = tracker_.isReady() && hs.guard.isActive();
+
+    Core::GestureEvent event;
+    if (canAct) {
+        event      = hs.detector.classify(result, frameW, frameH);
+        event.side = result.side;
+
+        handleMovement(hs, result, frameW, frameH, event.type);
+        handleDrag(hs, event.type);
+        handleTwoFingerScroll(hs, event.type, result);
+
+        hs.lastGesture = event.type;
+
+        if (event.type != Core::GestureType::NONE &&
+            event.type != Core::GestureType::FIST &&
+            event.type != Core::GestureType::TWO_FINGERS) {
+            queue_.push(event);
+            dispatchEvent(hs, event, frameW, frameH);
+        }
+    } else {
+        releaseDrag(hs);
+        hs.twoFingerScrollActive = false;
+        hs.twoFingerHoldFrames   = 0;
+        hs.scrollAccumulator     = 0.f;
+        if (hs.guard.isIdle()) {
+            hs.detector    = Vision::GestureDetector{};
+            hs.lastGesture = Core::GestureType::NONE;
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
+// Mouvement curseur
+// --------------------------------------------------------------------------
+
+void AuraRunner::handleMovement(HandState& hs, const Vision::DetectionResult& result,
+                                 int frameW, int frameH, Core::GestureType gesture) {
     if (!opts_.inputEnabled || !controller_.available()) return;
 
-    // Geler le curseur pendant les gestes d'action — seules les poses de navigation
-    // et le drag laissent le curseur bouger.
+    // Geler le curseur sauf pour les poses de navigation
     switch (gesture) {
         case Core::GestureType::OPEN_PALM:
         case Core::GestureType::POINT:
@@ -234,39 +250,33 @@ void AuraRunner::handleMovement(const Vision::DetectionResult& result,
         case Core::GestureType::NONE:
             break;
         default:
-            lastHandPos_ = result.smoothedPoint;  // garder à jour sans bouger
+            hs.lastHandPos = result.smoothedPoint;
             return;
     }
 
     if (opts_.absolute) {
-        // Mode absolu : main mappe directement l'écran (comportement d'origine)
         controller_.moveMouse(static_cast<int>(result.smoothedPoint.x),
                               static_cast<int>(result.smoothedPoint.y),
                               frameW, frameH);
-        lastHandPos_ = result.smoothedPoint;
+        hs.lastHandPos = result.smoothedPoint;
         return;
     }
 
-    // Mode relatif : delta de position × speed, avec zone morte
     const cv::Point2f& current = result.smoothedPoint;
-
-    if (lastHandPos_.x < 0.f) {
-        // Premier frame — initialiser sans bouger
-        lastHandPos_   = current;
+    if (hs.lastHandPos.x < 0.f) {
+        hs.lastHandPos = current;
         virtualCursor_ = current;
         return;
     }
 
-    float dx = current.x - lastHandPos_.x;
-    float dy = current.y - lastHandPos_.y;
-    lastHandPos_ = current;
+    float dx = current.x - hs.lastHandPos.x;
+    float dy = current.y - hs.lastHandPos.y;
+    hs.lastHandPos = current;
 
-    // Zone morte : ignorer les micro-tremblements
     if (std::abs(dx) < opts_.deadzone * frameW) dx = 0.f;
     if (std::abs(dy) < opts_.deadzone * frameH) dy = 0.f;
     if (dx == 0.f && dy == 0.f) return;
 
-    // Accumuler le déplacement amplifié
     virtualCursor_.x = std::clamp(virtualCursor_.x + dx * opts_.speed,
                                    0.f, static_cast<float>(frameW - 1));
     virtualCursor_.y = std::clamp(virtualCursor_.y + dy * opts_.speed,
@@ -277,113 +287,136 @@ void AuraRunner::handleMovement(const Vision::DetectionResult& result,
                           frameW, frameH);
 }
 
-void AuraRunner::handleDrag(Core::GestureType gesture) {
+// --------------------------------------------------------------------------
+// Drag
+// --------------------------------------------------------------------------
+
+void AuraRunner::handleDrag(HandState& hs, Core::GestureType gesture) {
     if (!opts_.inputEnabled || !controller_.available()) return;
     if (gesture == Core::GestureType::FIST) {
-        if (++fistFrameCount_ >= kDragActivateFrames && !isDragging_) {
+        if (++hs.fistFrameCount >= kDragActivateFrames && !hs.isDragging) {
             controller_.mouseDown(Input::MouseButton::Left);
-            isDragging_ = true;
+            hs.isDragging = true;
         }
     } else {
-        releaseDrag();
+        releaseDrag(hs);
     }
 }
 
-void AuraRunner::releaseDrag() {
-    if (!isDragging_) return;
+void AuraRunner::releaseDrag(HandState& hs) {
+    if (!hs.isDragging) return;
     if (opts_.inputEnabled && controller_.available())
         controller_.mouseUp(Input::MouseButton::Left);
-    isDragging_     = false;
-    fistFrameCount_ = 0;
+    hs.isDragging     = false;
+    hs.fistFrameCount = 0;
 }
 
-void AuraRunner::handleTwoFingerScroll(Core::GestureType gesture,
+// --------------------------------------------------------------------------
+// Scroll continu (TWO_FINGERS maintenu)
+// --------------------------------------------------------------------------
+
+void AuraRunner::handleTwoFingerScroll(HandState& hs, Core::GestureType gesture,
                                         const Vision::DetectionResult& result) {
     if (!opts_.inputEnabled || !controller_.available()) return;
 
     if (gesture == Core::GestureType::TWO_FINGERS) {
-        ++twoFingerHoldFrames_;
-        if (twoFingerHoldFrames_ >= kScrollActivateFrames) {
-            if (!twoFingerScrollActive_) {
-                twoFingerScrollActive_ = true;
-                lastScrollPosY_        = result.smoothedPoint.y;
-                scrollAccumulator_     = 0.f;
+        ++hs.twoFingerHoldFrames;
+        if (hs.twoFingerHoldFrames >= kScrollActivateFrames) {
+            if (!hs.twoFingerScrollActive) {
+                hs.twoFingerScrollActive = true;
+                hs.lastScrollPosY        = result.smoothedPoint.y;
+                hs.scrollAccumulator     = 0.f;
             } else {
-                // Mouvement vers le haut (y décroît) = scroll positif
-                float delta = lastScrollPosY_ - result.smoothedPoint.y;
-                lastScrollPosY_     = result.smoothedPoint.y;
-                scrollAccumulator_ += delta / 10.f;  // 10px = 1 unité de scroll
-                int steps = static_cast<int>(scrollAccumulator_);
+                float delta = hs.lastScrollPosY - result.smoothedPoint.y;
+                hs.lastScrollPosY     = result.smoothedPoint.y;
+                hs.scrollAccumulator += delta / 10.f;
+                int steps = static_cast<int>(hs.scrollAccumulator);
                 if (steps != 0) {
                     controller_.scroll(steps);
-                    scrollAccumulator_ -= static_cast<float>(steps);
+                    hs.scrollAccumulator -= static_cast<float>(steps);
                 }
             }
         }
     } else {
-        twoFingerScrollActive_ = false;
-        twoFingerHoldFrames_   = 0;
-        scrollAccumulator_     = 0.f;
+        hs.twoFingerScrollActive = false;
+        hs.twoFingerHoldFrames   = 0;
+        hs.scrollAccumulator     = 0.f;
     }
 }
 
-void AuraRunner::renderDebugOverlay(cv::Mat& frame, bool canAct,
-                                     const Core::GestureEvent& event) {
+// --------------------------------------------------------------------------
+// Debug overlay
+// --------------------------------------------------------------------------
+
+void AuraRunner::renderDebugOverlay(cv::Mat& frame,
+                                     const std::vector<Vision::DetectionResult>& results) {
     if (!tracker_.isReady()) {
         cv::putText(frame, "INIT... retirez votre main du cadre",
                     {10, 40}, cv::FONT_HERSHEY_SIMPLEX, 0.75,
                     cv::Scalar(0, 165, 255), 2, cv::LINE_AA);
         return;
     }
-    if (canAct) tracker_.drawSkeleton(frame);
+
+    // Skeleton de toutes les mains détectées
+    tracker_.drawSkeleton(frame);
     tracker_.drawDebug(frame);
-    if (isDragging_) {
-        cv::putText(frame, "DRAG",
-                    {10, 65}, cv::FONT_HERSHEY_SIMPLEX, 0.85,
-                    cv::Scalar(0, 80, 255), 2, cv::LINE_AA);
-    } else if (twoFingerScrollActive_) {
-        cv::putText(frame, "SCROLL",
-                    {10, 65}, cv::FONT_HERSHEY_SIMPLEX, 0.85,
-                    cv::Scalar(0, 200, 255), 2, cv::LINE_AA);
-    } else if (canAct && event.type != Core::GestureType::NONE) {
-        cv::putText(frame, Core::gestureName(event.type),
-                    {10, 65}, cv::FONT_HERSHEY_SIMPLEX, 0.85,
-                    cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
+
+    // État per-main : DRAG / SCROLL / geste actif
+    int yOffset = 65;
+    for (int i = 0; i < 2; ++i) {
+        const HandState& hs = handStates_[i];
+        if (!hs.guard.isActive()) continue;
+
+        std::string prefix = (i == 0) ? "[L] " : "[R] ";
+        cv::Scalar  color  = (i == 0) ? cv::Scalar(0, 210, 255) : cv::Scalar(255, 80, 50);
+
+        std::string msg;
+        if (hs.isDragging)              msg = prefix + "DRAG";
+        else if (hs.twoFingerScrollActive) msg = prefix + "SCROLL";
+        else if (hs.lastGesture != Core::GestureType::NONE)
+            msg = prefix + Core::gestureName(hs.lastGesture);
+
+        if (!msg.empty()) {
+            cv::putText(frame, msg, {10, yOffset}, cv::FONT_HERSHEY_SIMPLEX,
+                        0.8, color, 2, cv::LINE_AA);
+            yOffset += 28;
+        }
     }
-    activation_.drawOverlay(frame);
+
+    // Overlay d'activation : on choisit la main la plus avancée
+    ActivationGuard* bestGuard = nullptr;
+    for (int i = 0; i < 2; ++i) {
+        if (!bestGuard || handStates_[i].guard.isActive())
+            bestGuard = &handStates_[i].guard;
+    }
+    if (bestGuard) bestGuard->drawOverlay(frame);
 }
 
 // --------------------------------------------------------------------------
-// Dispatch : applique le mapping geste → action
+// Dispatch geste → action
 // --------------------------------------------------------------------------
 
-void AuraRunner::dispatchEvent(const Core::GestureEvent& event, int frameW, int frameH) {
+void AuraRunner::dispatchEvent(HandState& hs, const Core::GestureEvent& event,
+                                int frameW, int frameH) {
     if (!opts_.inputEnabled || !controller_.available()) return;
-
-    // MOUSE_MOVE est toujours géré en dehors du mapping (voir processFrame)
     if (event.type == Core::GestureType::NONE) return;
 
-    // Cooldown pour éviter de répéter la même action en boucle
     auto now = std::chrono::steady_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                  now - lastActionTime_).count();
+    auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                   now - hs.lastActionTime).count();
 
-    // Les swipes et actions one-shot nécessitent un cooldown
     bool isSwipe = (event.type == Core::GestureType::SWIPE_LEFT  ||
                     event.type == Core::GestureType::SWIPE_RIGHT ||
                     event.type == Core::GestureType::SWIPE_UP    ||
                     event.type == Core::GestureType::SWIPE_DOWN);
 
-    bool sameGesture = (event.type == lastGesture_);
-    if (sameGesture && !isSwipe && ms < kActionCooldownMs) return;
+    if (event.type == hs.lastGesture && !isSwipe && ms < kActionCooldownMs) return;
 
-    lastGesture_    = event.type;
-    lastActionTime_ = now;
+    hs.lastActionTime = now;
 
-    Input::Action action = mapper_.actionFor(event.type);
-    if (action.type != Input::ActionType::NONE) {
+    Input::Action action = mapper_.actionFor(event.type, event.side);
+    if (action.type != Input::ActionType::NONE)
         executeAction(action, event.position, frameW, frameH);
-    }
 }
 
 void AuraRunner::executeAction(const Input::Action& action,
@@ -399,7 +432,6 @@ void AuraRunner::executeAction(const Input::Action& action,
 
     switch (action.type) {
         case Input::ActionType::MOUSE_MOVE:
-            // Déjà géré en continu dans processFrame
             break;
 
         case Input::ActionType::MOUSE_CLICK: {
@@ -408,8 +440,7 @@ void AuraRunner::executeAction(const Input::Action& action,
                                     (btn == "MIDDLE") ? Input::MouseButton::Middle :
                                                         Input::MouseButton::Left;
             controller_.click(mb);
-            if (opts_.verbose)
-                std::cout << "\n[Action] MOUSE_CLICK " << btn << "\n";
+            if (opts_.verbose) std::cout << "\n[Action] MOUSE_CLICK " << btn << "\n";
             break;
         }
 
@@ -419,8 +450,7 @@ void AuraRunner::executeAction(const Input::Action& action,
                                     (btn == "MIDDLE") ? Input::MouseButton::Middle :
                                                         Input::MouseButton::Left;
             controller_.doubleClick(mb);
-            if (opts_.verbose)
-                std::cout << "\n[Action] MOUSE_DOUBLE_CLICK " << btn << "\n";
+            if (opts_.verbose) std::cout << "\n[Action] MOUSE_DOUBLE_CLICK " << btn << "\n";
             break;
         }
 
@@ -448,22 +478,18 @@ void AuraRunner::executeAction(const Input::Action& action,
             int dy = (dir == "DOWN") ? -amount : amount;
             int dx = (dir == "LEFT") ? -amount : (dir == "RIGHT") ? amount : 0;
             controller_.scroll(dy, dx);
-            if (opts_.verbose)
-                std::cout << "\n[Action] SCROLL " << dir << " " << amount << "\n";
+            if (opts_.verbose) std::cout << "\n[Action] SCROLL " << dir << " " << amount << "\n";
             break;
         }
 
         case Input::ActionType::KEY_PRESS: {
             std::string key = param(0, "SPACE");
             controller_.pressKey(key);
-            if (opts_.verbose)
-                std::cout << "\n[Action] KEY_PRESS " << key << "\n";
+            if (opts_.verbose) std::cout << "\n[Action] KEY_PRESS " << key << "\n";
             break;
         }
 
         case Input::ActionType::KEY_COMBO: {
-            // Tous sauf le dernier = modificateurs (maintenus)
-            // Dernier = touche principale
             if (action.params.empty()) break;
             int mods = static_cast<int>(action.params.size()) - 1;
             for (int i = 0; i < mods; ++i) controller_.keyDown(action.params[i]);
@@ -477,15 +503,13 @@ void AuraRunner::executeAction(const Input::Action& action,
             break;
         }
 
-        case Input::ActionType::KEY_DOWN: {
+        case Input::ActionType::KEY_DOWN:
             controller_.keyDown(param(0, "SPACE"));
             break;
-        }
 
-        case Input::ActionType::KEY_UP: {
+        case Input::ActionType::KEY_UP:
             controller_.keyUp(param(0, "SPACE"));
             break;
-        }
 
         default: break;
     }
@@ -498,18 +522,19 @@ void AuraRunner::executeAction(const Input::Action& action,
 // --------------------------------------------------------------------------
 
 void AuraRunner::showDebug(cv::Mat& frame, const cv::Mat& mask,
-                            const Vision::DetectionResult& result,
-                            const Core::GestureEvent& /*event*/) {
-    // Infos de debug discrètes (aire, solidité)
-    if (tracker_.isReady() && result.found) {
-        float sol = (result.hullArea > 0.f)
-                   ? result.area / result.hullArea * 100.f : 0.f;
-        std::string info = "aire:" + std::to_string(static_cast<int>(result.area))
+                            const std::vector<Vision::DetectionResult>& results) {
+    int y = frame.rows - 52;
+    for (const auto& r : results) {
+        if (!r.found) continue;
+        float sol = (r.hullArea > 0.f) ? r.area / r.hullArea * 100.f : 0.f;
+        std::string side = (r.side == Core::HandSide::LEFT)  ? "L"
+                         : (r.side == Core::HandSide::RIGHT) ? "R" : "?";
+        std::string info = "[" + side + "] aire:" + std::to_string(static_cast<int>(r.area))
                          + " sol:" + std::to_string(static_cast<int>(sol)) + "%"
-                         + " doigts:" + std::to_string(result.fingerCount);
-        cv::putText(frame, info,
-                    {10, frame.rows - 32}, cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                         + " f:" + std::to_string(r.fingerCount);
+        cv::putText(frame, info, {10, y}, cv::FONT_HERSHEY_SIMPLEX, 0.45,
                     cv::Scalar(180, 180, 0), 1, cv::LINE_AA);
+        y += 18;
     }
 
     cv::putText(frame, "'s'=save calib  'q'=quitter",

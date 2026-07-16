@@ -22,7 +22,8 @@ public:
 
     // Met à jour la détection. En mode bridge, frame peut être vide.
     // outMask est rempli en mode CV (vide en mode bridge).
-    DetectionResult process(const cv::Mat& frame, const HSVRange& hsvHint, cv::Mat& outMask);
+    // Retourne 0, 1 ou 2 résultats (bridge = jusqu'à 2 mains, CV = au plus 1).
+    std::vector<DetectionResult> process(const cv::Mat& frame, const HSVRange& hsvHint, cv::Mat& outMask);
 
     // Affiche le skeleton sur une frame (mode CV : contours, mode bridge : landmarks)
     void drawSkeleton(cv::Mat& frame) const;
@@ -40,7 +41,8 @@ private:
     bool        bridgeReady_   = false;
 
     bool tryStartBridge(int cameraDevice);
-    bool readFromBridge(LandmarkData& out);
+    // Lit toutes les lignes d'une frame (jusqu'à FRAME_END ou NONE).
+    std::vector<DetectionResult> readAllFromBridge(int fw, int fh);
 
     // ---- Mode CV (fallback) ----
     cv::VideoCapture                  cap_;
@@ -54,12 +56,13 @@ private:
                                                     const cv::Point2f& centroid,
                                                     float handHeight);
 
-    // ---- Lissage commun ----
-    Core::KalmanFilter2D smoother_;
-    DetectionResult      lastResult_;
+    // ---- Lissage commun — un filtre par main (0=LEFT, 1=RIGHT) ----
+    std::array<Core::KalmanFilter2D, 2> smoothers_;
+    std::vector<DetectionResult>        lastResults_;
 
     // ---- Conversion landmarks → DetectionResult ----
-    DetectionResult landmarksToResult(const LandmarkData& lm, int frameW, int frameH);
+    DetectionResult landmarksToResult(const LandmarkData& lm, Core::HandSide side,
+                                      int smootherIdx, int frameW, int frameH);
 };
 
 } // namespace Aura::Vision
