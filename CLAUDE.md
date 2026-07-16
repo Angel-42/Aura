@@ -205,7 +205,43 @@ Implémentation : thread de surveillance dans AuraRunner + hot-reload du Mapper.
 Appui sur un bouton dans la démo → geste → bind immédiat dans le profil actif.
 Nécessite la démo SFML comme surface d'affichage.
 
-### 5. Tests additionnels
+### 5. Refactor bindings — intuitivité et fluidité
+
+Le système actuel (cooldown fixe, pas de feedback progressif) n'est pas assez fluide.
+À retravailler après tests en conditions réelles : temps de maintien graduel, enchaînement
+de gestes naturel, feedback visuel progressif. **À faire après la démo SFML** qui servira
+de terrain de test.
+
+### 6. Classifieur ML custom (remplacement de GestureDetector)
+
+Entraîner un classificateur sur les landmarks MediaPipe plutôt que des règles géométriques.
+
+Pipeline :
+```
+MediaPipe → 63 features (21 pts × xyz) → MLP 3 couches → GestureType
+```
+
+Étapes :
+1. Script Python de collecte : enregistre les 63 features + label pour chaque frame
+2. Entraînement (scikit-learn ou PyTorch, CPU, ~30min)
+3. Export ONNX → chargement C++ via ONNX Runtime
+4. Remplacement de `src/Vision/GestureDetector.cpp` par `MLGestureDetector`
+
+Avantages : personnalisé à ta main/lumière, plus robuste, montre la compréhension du sujet.
+Ce modèle est le "head" sur le backbone MediaPipe — exactement comme ResNet+tête custom.
+
+### 7. C++ pur sans bridge Python (facultatif)
+
+Objectif : supprimer `hand_bridge.py` et la dépendance Python.
+Options (par ordre de réalisme) :
+- **MediaPipe C Tasks API** — API C propre, binaires pré-compilés à trouver
+- **ONNX Runtime C++** — convertir `.task` → ONNX, API CMake-friendly
+- **TFLite C++ direct** — extraire le `.tflite` du `.task` et le loader manuellement
+
+Note : le bridge coûte ~2ms/frame de latence IPC — pas le goulot d'étranglement.
+À faire pour la propreté de l'archi / distribution sans dépendance Python, pas pour les perfs.
+
+### 8. Tests additionnels
 
 - Test d'intégration AuraRunner (pipeline frame-par-frame mocké)
 - Tests Controller keyboard (Linux XTest / macOS CGEvent)
