@@ -1,0 +1,27 @@
+# AURA — Profil Gaming (vue FPS / aventure)
+# Usage : ./aura --profile gaming
+#
+# Schéma :
+#   Main gauche  → déplacements clavier (WASD, saut, crouch)
+#   Main droite  → souris (viser) + tir (PINCH)
+
+# ── Main droite : combat ──────────────────────────────────────────────────────
+RIGHT_PINCH         = MOUSE_CLICK LEFT      # tir principal
+RIGHT_PINCH_MIDDLE  = MOUSE_CLICK RIGHT     # tir secondaire / ADS
+RIGHT_PINCH_DOUBLE  = MOUSE_DOUBLE_CLICK LEFT
+
+# ── Main gauche : déplacements ───────────────────────────────────────────────
+LEFT_FIST           = NONE                  # pas de drag en jeu
+LEFT_PINCH          = KEY_PRESS SPACE       # saut
+LEFT_PINCH_MIDDLE   = KEY_PRESS C           # accroupi (crouch)
+LEFT_THREE_FINGERS  = KEY_PRESS E           # interagir
+LEFT_FOUR_FINGERS   = KEY_PRESS R           # recharger
+LEFT_SWIPE_LEFT     = KEY_PRESS Q           # objet précédent
+LEFT_SWIPE_RIGHT    = KEY_PRESS F           # ramasser
+LEFT_SWIPE_UP       = SCROLL UP 1           # molette haut (arme suivante)
+LEFT_SWIPE_DOWN     = SCROLL DOWN 1         # molette bas  (arme précédente)
+
+# ── Generiques (sans préfixe) ─────────────────────────────────────────────────
+PINCH               = MOUSE_CLICK LEFT
+SWIPE_UP            = SCROLL UP 1
+SWIPE_DOWN          = SCROLL DOWN 1

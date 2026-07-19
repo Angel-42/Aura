@@ -74,7 +74,7 @@ void AuraRunner::setupCalibration() {
 
 void AuraRunner::setupMapping() {
     Config::ProfileManager pm;
-    pm.initDefault("config/default_mapping.txt");
+    pm.seedFromDir("config/");  // copie tous les profils bundlés si absents
 
     const std::string& name = opts_.profile.empty() ? "default" : opts_.profile;
 

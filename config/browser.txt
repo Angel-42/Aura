@@ -1,0 +1,20 @@
+# AURA — Profil Browser
+# Optimisé pour navigation web (Firefox, Chrome, Safari)
+# Usage : ./aura --profile browser
+
+PINCH           = MOUSE_CLICK LEFT
+PINCH_MIDDLE    = MOUSE_CLICK RIGHT
+PINCH_DOUBLE    = MOUSE_DOUBLE_CLICK LEFT
+
+SWIPE_UP        = SCROLL UP 3
+SWIPE_DOWN      = SCROLL DOWN 3
+SWIPE_LEFT      = KEY_COMBO CMD LEFT        # page précédente (macOS)
+SWIPE_RIGHT     = KEY_COMBO CMD RIGHT       # page suivante  (macOS)
+
+# Linux : remplace CMD par ALT
+# SWIPE_LEFT  = KEY_COMBO ALT LEFT
+# SWIPE_RIGHT = KEY_COMBO ALT RIGHT
+
+THREE_FINGERS   = KEY_COMBO CMD T           # nouvel onglet
+FOUR_FINGERS    = KEY_COMBO CMD W           # fermer onglet
+PINCH_RING      = KEY_COMBO CMD R           # recharger

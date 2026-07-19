@@ -23,5 +23,11 @@ add_custom_command(TARGET aura_demo POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/config/default_mapping.txt"
             "$<TARGET_FILE_DIR:aura_demo>/config/default_mapping.txt"
-    COMMENT "Copie du mapping dans le répertoire de build de la démo"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/config/browser.txt"
+            "$<TARGET_FILE_DIR:aura_demo>/config/browser.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/config/gaming.txt"
+            "$<TARGET_FILE_DIR:aura_demo>/config/gaming.txt"
+    COMMENT "Copie des profils dans le répertoire de build de la démo"
 )

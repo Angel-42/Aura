@@ -68,4 +68,23 @@ bool ProfileManager::initDefault(const std::filesystem::path& sourceFile) const 
     return true;
 }
 
+void ProfileManager::seedFromDir(const std::filesystem::path& configDir) const {
+    // Chercher le répertoire config/ (relatif au CWD ou au parent)
+    std::filesystem::path src;
+    for (const auto& candidate : {configDir, std::filesystem::path("../") / configDir}) {
+        if (std::filesystem::is_directory(candidate)) { src = candidate; break; }
+    }
+    if (src.empty()) return;
+
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(src, ec)) {
+        if (entry.path().extension() != ".txt") continue;
+        std::string name = entry.path().stem().string();
+        if (exists(name)) continue;  // ne pas écraser les modifs utilisateur
+        std::filesystem::copy_file(entry.path(), path(name), ec);
+        if (!ec)
+            std::cout << "[ProfileManager] Profil '" << name << "' créé → " << path(name) << "\n";
+    }
+}
+
 } // namespace Aura::Config

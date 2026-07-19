@@ -42,8 +42,10 @@ private:
     Display* display_;
     bool sendKey(const std::string& keyName, bool down);
 #elif defined(__APPLE__)
+    uint64_t modifierFlags_ = 0;  // CGEventFlags — suivi des modificateurs actifs
     bool sendKey(const std::string& keyName, bool down);
     static unsigned short resolveKeyCode(const std::string& keyName);
+    static uint64_t       modifierFlagFor(const std::string& keyName);
 #endif
 };
 

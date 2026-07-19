@@ -20,6 +20,9 @@ public:
     // Copie sourceFile vers profiles/default.txt si le profil "default" n'existe pas.
     bool initDefault(const std::filesystem::path& sourceFile) const;
 
+    // Copie tous les .txt de configDir vers profiles/ (sans écraser les modifs utilisateur).
+    void seedFromDir(const std::filesystem::path& configDir) const;
+
     [[nodiscard]] std::filesystem::path profilesDir() const { return dir_; }
 
 private:

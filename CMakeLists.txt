@@ -60,7 +60,13 @@ add_custom_command(TARGET aura POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/config/default_mapping.txt"
             "$<TARGET_FILE_DIR:aura>/config/default_mapping.txt"
-    COMMENT "Copie du mapping par défaut dans le répertoire de build"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/config/browser.txt"
+            "$<TARGET_FILE_DIR:aura>/config/browser.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/config/gaming.txt"
+            "$<TARGET_FILE_DIR:aura>/config/gaming.txt"
+    COMMENT "Copie des profils dans le répertoire de build"
 )
 
 # ---- Tests ----

@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
     for (const auto& a : args) {
         if (a == "--list-profiles") {
             Aura::Config::ProfileManager pm;
-            pm.initDefault("config/default_mapping.txt");
+            pm.seedFromDir("config/");
             auto profiles = pm.list();
             if (profiles.empty()) {
                 std::cout << "Aucun profil dans " << pm.profilesDir() << "\n";

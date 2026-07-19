@@ -65,6 +65,15 @@ unsigned short Controller::resolveKeyCode(const std::string& name) {
     auto it = table.find(name);
     return (it != table.end()) ? it->second : 0xFFFF;
 }
+
+// Retourne le flag CGEventFlags correspondant à une touche modificatrice
+uint64_t Controller::modifierFlagFor(const std::string& name) {
+    if (name == "CTRL")                               return kCGEventFlagMaskControl;
+    if (name == "SHIFT")                              return kCGEventFlagMaskShift;
+    if (name == "ALT")                                return kCGEventFlagMaskAlternate;
+    if (name == "CMD" || name == "META" || name == "WIN") return kCGEventFlagMaskCommand;
+    return 0;
+}
 #endif
 
 // --------------------------------------------------------------------------
@@ -254,8 +263,18 @@ bool Controller::sendKey(const std::string& keyName, bool down) {
         std::cerr << "[Controller] Unknown key: " << keyName << "\n";
         return false;
     }
+
+    // Mettre à jour le suivi des modificateurs actifs
+    uint64_t flag = modifierFlagFor(keyName);
+    if (flag) {
+        if (down) modifierFlags_ |=  flag;
+        else      modifierFlags_ &= ~flag;
+    }
+
     CGEventRef ev = CGEventCreateKeyboardEvent(nullptr, static_cast<CGKeyCode>(code), down);
     if (!ev) return false;
+    // Attacher les flags de modificateurs à l'événement — indispensable pour KEY_COMBO
+    CGEventSetFlags(ev, static_cast<CGEventFlags>(modifierFlags_));
     CGEventPost(kCGHIDEventTap, ev);
     CFRelease(ev);
     return true;

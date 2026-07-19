@@ -1,63 +1,31 @@
-# AURA — Mapping gestes → actions
+# AURA — Mapping par défaut
 # Modifiable sans recompiler. Rechargé à chaque lancement.
 #
 # Format : GESTURE = ACTION [PARAM1 [PARAM2 ...]]
+# Préfixe LEFT_ ou RIGHT_ pour cibler une main spécifique.
 #
-# ── Support deux mains ───────────────────────────────────────────────────────
-# Préfixe optionnel LEFT_ ou RIGHT_ pour binder une main spécifique.
-# Sans préfixe = s'applique aux deux mains.
-#
-# Exemples :
-#   LEFT_OPEN_PALM  = NONE            # main gauche ne bouge pas le curseur
-#   RIGHT_PINCH     = MOUSE_CLICK LEFT
-#   LEFT_FIST       = KEY_PRESS SPACE  # main gauche FIST = espace
-#
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# ─────────────────────────────────────────────────────────────────────────────
-#
-#  LOGIQUE : le doigt fait le sens
-#
-#   Index seul          →  curseur (naviguer)
-#   Paume ouverte       →  curseur (naviguer, main détendue)
-#   Index + pouce       →  clic gauche          ← PINCH
-#   Majeur + pouce      →  clic droit           ← PINCH_MIDDLE
-#   Index+majeur+pouce  →  double-clic          ← PINCH_DOUBLE
-#   Push vers caméra    →  clic gauche          ← ZTAP (alternatif naturel)
-#   Poing maintenu      →  drag                 ← géré en dur
-#   2 doigts maintenus  →  scroll continu       ← géré en dur
-#   Balayage haut/bas   →  scroll rapide
-#   Balayage gauche/droit → navigation browser
-#
-#  Les autres poses (THREE_FINGERS, FOUR_FINGERS, PINCH_RING, etc.)
-#  sont à NONE — trop imprécis ou trop difficiles pour une action fiable.
-#  Tu peux les assigner si tu trouves un usage qui te convient.
-#
-# ─────────────────────────────────────────────────────────────────────────────
+#  Logique de navigation :
+#   POINT (index seul)   →  curseur suit le bout du doigt   [géré en dur]
+#   OPEN_PALM            →  pose neutre, curseur gelé        [géré en dur]
+#   FIST maintenu        →  drag souris                      [géré en dur]
+#   TWO_FINGERS maintenu →  scroll continu                   [géré en dur]
 
-# ── Navigation (curseur suit la main) ────────────────────────────────────────
-OPEN_PALM       = NONE   # main détendue ouverte
-POINT           = NONE   # index seul levé
+# ── Clics souris ─────────────────────────────────────────────────────────────
+PINCH           = MOUSE_CLICK LEFT          # pouce + index
+PINCH_MIDDLE    = MOUSE_CLICK RIGHT         # pouce + majeur
+PINCH_DOUBLE    = MOUSE_DOUBLE_CLICK LEFT   # pouce + index + majeur
+ZTAP            = MOUSE_CLICK LEFT          # push vers caméra (alternatif)
 
-# ── Clics ────────────────────────────────────────────────────────────────────
-PINCH           = MOUSE_CLICK LEFT          # index + pouce → clic gauche
-PINCH_MIDDLE    = MOUSE_CLICK RIGHT         # majeur + pouce → clic droit
-PINCH_DOUBLE    = MOUSE_DOUBLE_CLICK LEFT   # index + majeur + pouce → double-clic
-ZTAP            = MOUSE_CLICK LEFT          # push vers caméra → clic gauche
+# ── Scroll rapide ─────────────────────────────────────────────────────────────
+SWIPE_UP        = SCROLL UP 3
+SWIPE_DOWN      = SCROLL DOWN 3
 
-# ── Scroll rapide (swipes) ───────────────────────────────────────────────────
-SWIPE_UP        = SCROLL UP 5
-SWIPE_DOWN      = SCROLL DOWN 5
+# ── Navigation clavier (touches fléchées, universel) ─────────────────────────
+SWIPE_LEFT      = KEY_PRESS LEFT
+SWIPE_RIGHT     = KEY_PRESS RIGHT
 
-# ── Navigation browser ───────────────────────────────────────────────────────
-SWIPE_LEFT      = KEY_COMBO ALT LEFT
-SWIPE_RIGHT     = KEY_COMBO ALT RIGHT
-
-# ── Poses non utilisées (NONE = aucune action) ───────────────────────────────
-# Décommente et assigne si tu veux les utiliser.
-FIST            = NONE   # réservé drag (géré en dur, ce bind n'a pas d'effet)
-THREE_FINGERS   = NONE   # difficile à déclencher intentionnellement
-FOUR_FINGERS    = NONE   # libre
-PINCH_RING      = NONE   # libre
-PINCH_PINKY     = NONE   # libre
-PINCH_SIDE      = NONE   # libre
+# ── Poses libres ─────────────────────────────────────────────────────────────
+# THREE_FINGERS = KEY_PRESS SPACE
+# FOUR_FINGERS  = KEY_PRESS TAB
+# PINCH_RING    = KEY_PRESS ESC
+# PINCH_PINKY   = KEY_PRESS BACKSPACE
