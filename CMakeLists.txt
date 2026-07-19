@@ -58,8 +58,8 @@ target_link_libraries(aura PRIVATE aura_lib)
 add_custom_command(TARGET aura POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:aura>/config"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_SOURCE_DIR}/config/default_mapping.txt"
-            "$<TARGET_FILE_DIR:aura>/config/default_mapping.txt"
+            "${CMAKE_SOURCE_DIR}/config/default.txt"
+            "$<TARGET_FILE_DIR:aura>/config/default.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/config/browser.txt"
             "$<TARGET_FILE_DIR:aura>/config/browser.txt"

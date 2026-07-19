@@ -87,7 +87,7 @@ void AuraRunner::setupMapping() {
             std::cerr << "\n";
         }
         // Fallback sur le mapping embarqué dans config/
-        std::cerr << "[AuraRunner] Fallback sur config/default_mapping.txt\n";
+        std::cerr << "[AuraRunner] Fallback sur config/default.txt\n";
         mapper_.loadDefault();
         return;
     }

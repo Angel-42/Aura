@@ -166,11 +166,11 @@ bool Mapper::load(const std::filesystem::path& path) {
 }
 
 bool Mapper::loadDefault() {
-    // Cherche config/default_mapping.txt dans le répertoire courant
-    std::filesystem::path p = "config/default_mapping.txt";
+    // Cherche config/default.txt dans le répertoire courant
+    std::filesystem::path p = "config/default.txt";
     if (!std::filesystem::exists(p)) {
         // Fallback : même répertoire que le binaire (si lancé depuis build/)
-        p = "../config/default_mapping.txt";
+        p = "../config/default.txt";
     }
     if (!std::filesystem::exists(p)) {
         std::cerr << "[Mapper] Default mapping not found. Running without gesture mapping.\n";

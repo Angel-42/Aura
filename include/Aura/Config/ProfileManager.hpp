@@ -6,7 +6,7 @@
 namespace Aura::Config {
 
 // Gère les profils de mapping dans ~/.aura/profiles/<name>.txt
-// Un profil = un fichier de mapping complet (même format que default_mapping.txt).
+// Un profil = un fichier de mapping complet (même format que default.txt).
 class ProfileManager {
 public:
     ProfileManager();

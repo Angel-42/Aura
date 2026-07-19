@@ -21,8 +21,8 @@ target_include_directories(aura_demo PRIVATE
 add_custom_command(TARGET aura_demo POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:aura_demo>/config"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_SOURCE_DIR}/config/default_mapping.txt"
-            "$<TARGET_FILE_DIR:aura_demo>/config/default_mapping.txt"
+            "${CMAKE_SOURCE_DIR}/config/default.txt"
+            "$<TARGET_FILE_DIR:aura_demo>/config/default.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/config/browser.txt"
             "$<TARGET_FILE_DIR:aura_demo>/config/browser.txt"

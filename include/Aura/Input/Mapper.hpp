@@ -30,7 +30,7 @@ class Mapper {
 public:
     Mapper() = default;
     bool load(const std::filesystem::path& path);
-    bool loadDefault();  // cherche config/default_mapping.txt à côté du binaire
+    bool loadDefault();  // cherche config/default.txt à côté du binaire
 
     // Cherche d'abord un binding spécifique à 'side', puis le binding générique.
     [[nodiscard]] Action actionFor(Core::GestureType gesture,
