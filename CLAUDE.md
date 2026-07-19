@@ -241,7 +241,25 @@ Options (par ordre de réalisme) :
 Note : le bridge coûte ~2ms/frame de latence IPC — pas le goulot d'étranglement.
 À faire pour la propreté de l'archi / distribution sans dépendance Python, pas pour les perfs.
 
-### 8. Tests additionnels
+### 8. Distribution — macOS .app bundle
+
+Objectif : une appli `AURA.app` qu'on glisse dans Applications, rien à installer.
+
+Contenu du bundle :
+- Binaire `aura` avec OpenCV dylibs bundlées (`dylibbundler`)
+- `hand_bridge` standalone compilé avec PyInstaller (élimine la dépendance Python)
+- `models/hand_landmarker.task` + `config/` + profils par défaut
+
+Étapes :
+1. `pyinstaller --onefile scripts/hand_bridge.py` → `hand_bridge` binaire
+2. `dylibbundler` pour copier + patcher les dylibs OpenCV dans `AURA.app/Contents/Frameworks/`
+3. Adapter `HandTracker` pour chercher `hand_bridge` dans `../Resources/` (bundle path)
+4. `Info.plist` minimal, icône optionnelle
+5. Optionnel : signature `codesign` pour éviter le warning Gatekeeper
+
+**À faire après que le moteur soit stable.**
+
+### 9. Tests additionnels
 
 - Test d'intégration AuraRunner (pipeline frame-par-frame mocké)
 - Tests Controller keyboard (Linux XTest / macOS CGEvent)
