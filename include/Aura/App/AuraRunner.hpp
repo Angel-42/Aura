@@ -10,6 +10,7 @@
 #include "Aura/Input/Mapper.hpp"
 #include "Aura/Config/CalibConfig.hpp"
 #include <array>
+#include <atomic>
 #include <chrono>
 
 namespace Aura::App {
@@ -55,6 +56,7 @@ class AuraRunner {
 public:
     explicit AuraRunner(RunnerOptions opts);
     void run();
+    void stop() { stopRequested_.store(true, std::memory_order_relaxed); }
     Core::EventQueue<Core::GestureEvent>& eventQueue() { return queue_; }
 
 private:
@@ -103,6 +105,8 @@ private:
                        int frameW, int frameH);
     void executeAction(const Input::Action& action,
                        const cv::Point2f& normPos, int frameW, int frameH);
+
+    std::atomic<bool> stopRequested_{false};
 
     // Debug UI
     bool debugUICreated_ = false;

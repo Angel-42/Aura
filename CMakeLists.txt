@@ -8,6 +8,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ---- Options ----
 option(BUILD_TESTS "Build unit tests" OFF)
+option(BUILD_DEMO  "Build SFML demo application" OFF)
+
+# SFML via Homebrew sur macOS
+if(APPLE)
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew")
+endif()
 
 # ---- Dépendances ----
 find_package(OpenCV REQUIRED)
@@ -61,4 +67,9 @@ add_custom_command(TARGET aura POST_BUILD
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# ---- Demo SFML ----
+if(BUILD_DEMO)
+    add_subdirectory(demo)
 endif()

@@ -148,7 +148,7 @@ void AuraRunner::run() {
     }
     std::cout << "Appuyez sur 'q' pour quitter.\n\n";
 
-    while (true) {
+    while (!stopRequested_.load(std::memory_order_relaxed)) {
         cv::Mat frame;
         if (tracker_.usesBridge()) {
             processFrame(frame);
