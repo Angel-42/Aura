@@ -1,5 +1,6 @@
 #pragma once
 #include "Aura/App/ActivationGuard.hpp"
+#include "Aura/App/AutoProfileSwitcher.hpp"
 #include "Aura/Vision/Camera.hpp"
 #include "Aura/Vision/HandTracker.hpp"
 #include "Aura/Vision/GestureDetector.hpp"
@@ -9,9 +10,11 @@
 #include "Aura/Input/Controller.hpp"
 #include "Aura/Input/Mapper.hpp"
 #include "Aura/Config/CalibConfig.hpp"
+#include "Aura/Config/ProfileManager.hpp"
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 namespace Aura::App {
 
@@ -25,7 +28,8 @@ struct RunnerOptions {
     bool autoCalib    = false;
 
     // Profil de mapping (nom du fichier dans ~/.aura/profiles/, sans extension)
-    std::string profile;  // "" = "default"
+    std::string profile;     // "" = "default"
+    bool autoProfile = false; // surveille l'app active et change de profil auto
 
     // Sensibilité curseur
     float speed    = 1.5f;
@@ -91,6 +95,7 @@ private:
     bool init();
     void setupCalibration();
     void setupMapping();
+    void loadProfile(const Config::ProfileManager& pm, const std::string& name);
     void setupDebugUI();
 
     // Boucle principale
@@ -113,6 +118,8 @@ private:
                        const cv::Point2f& normPos, int frameW, int frameH);
 
     std::atomic<bool> stopRequested_{false};
+    std::unique_ptr<AutoProfileSwitcher> autoSwitcher_;
+    std::string activeProfile_;  // profil actuellement chargé
 
     // Debug UI
     bool debugUICreated_ = false;

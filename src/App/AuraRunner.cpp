@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 namespace Aura::App {
 
@@ -76,24 +77,32 @@ void AuraRunner::setupMapping() {
     Config::ProfileManager pm;
     pm.seedFromDir("config/");  // copie tous les profils bundlés si absents
 
-    const std::string& name = opts_.profile.empty() ? "default" : opts_.profile;
+    const std::string name = opts_.profile.empty() ? "default" : opts_.profile;
+    loadProfile(pm, name);
 
+    // Auto-switch : initialiser le switcher si demandé
+    if (opts_.autoProfile) {
+        const char* home = std::getenv("HOME");
+        std::filesystem::path cfgPath =
+            (home ? std::filesystem::path(home) : std::filesystem::path("."))
+            / ".aura" / "auto_profile.txt";
+        AutoProfileSwitcher::createTemplateIfMissing(cfgPath);
+        autoSwitcher_ = std::make_unique<AutoProfileSwitcher>(cfgPath);
+        std::cout << "[AuraRunner] Auto-switch profil activé\n";
+    }
+}
+
+void AuraRunner::loadProfile(const Config::ProfileManager& pm, const std::string& name) {
     if (!pm.exists(name)) {
-        std::cerr << "[AuraRunner] Profil '" << name << "' introuvable dans " << pm.profilesDir() << "\n";
-        auto available = pm.list();
-        if (!available.empty()) {
-            std::cerr << "[AuraRunner] Profils disponibles :";
-            for (const auto& p : available) std::cerr << " " << p;
-            std::cerr << "\n";
-        }
-        // Fallback sur le mapping embarqué dans config/
-        std::cerr << "[AuraRunner] Fallback sur config/default.txt\n";
+        if (name != "default")
+            std::cerr << "[AuraRunner] Profil '" << name << "' introuvable — fallback default\n";
         mapper_.loadDefault();
+        activeProfile_ = "default";
         return;
     }
-
     mapper_.load(pm.path(name));
-    std::cout << "[AuraRunner] Profil '" << name << "' ← " << pm.path(name) << "\n";
+    activeProfile_ = name;
+    std::cout << "[AuraRunner] Profil '" << name << "' chargé\n";
 }
 
 void AuraRunner::setupDebugUI() {
@@ -149,6 +158,16 @@ void AuraRunner::run() {
     std::cout << "Appuyez sur 'q' pour quitter.\n\n";
 
     while (!stopRequested_.load(std::memory_order_relaxed)) {
+        // Auto-switch profil selon l'app active
+        if (autoSwitcher_) {
+            std::string newProfile;
+            if (autoSwitcher_->pollChanged(newProfile)) {
+                Config::ProfileManager pm;
+                loadProfile(pm, newProfile);
+                std::cout << "[AutoProfile] → '" << newProfile << "'\n";
+            }
+        }
+
         cv::Mat frame;
         if (tracker_.usesBridge()) {
             processFrame(frame);

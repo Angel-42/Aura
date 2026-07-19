@@ -18,7 +18,8 @@ static void printHelp(const std::string& prog) {
         << "  --auto-calib        Calibration automatique\n\n"
         << "Profils de mapping :\n"
         << "  --profile <nom>     Charge ~/.aura/profiles/<nom>.txt (défaut: default)\n"
-        << "  --list-profiles     Liste les profils disponibles\n\n"
+        << "  --list-profiles     Liste les profils disponibles\n"
+        << "  --auto-profile      Change de profil automatiquement selon l'app active\n\n"
         << "Sensibilité curseur :\n"
         << "  --speed <x>         Multiplicateur de vitesse (défaut: 1.5, ex: 2.0)\n"
         << "  --deadzone <x>      Zone morte en fraction de frame (défaut: 0.02)\n"
@@ -58,6 +59,7 @@ int main(int argc, char* argv[]) {
         if (a == "--debug")       { opts.debug        = true;  continue; }
         if (a == "--auto-calib")  { opts.autoCalib    = true;  continue; }
         if (a == "--absolute")    { opts.absolute     = true;  continue; }
+        if (a == "--auto-profile"){ opts.autoProfile  = true;  continue; }
         if (a == "--camera"    && i + 1 < args.size()) { opts.cameraDevice = std::stoi(args[++i]); continue; }
         if (a == "--speed"     && i + 1 < args.size()) { opts.speed        = std::stof(args[++i]); continue; }
         if (a == "--deadzone"  && i + 1 < args.size()) { opts.deadzone     = std::stof(args[++i]); continue; }

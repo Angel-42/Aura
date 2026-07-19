@@ -30,6 +30,7 @@ set(AURA_LIB_SOURCES
     src/Input/Controller.cpp
     src/Input/Mapper.cpp
     src/App/AuraRunner.cpp
+    src/App/AutoProfileSwitcher.cpp
 )
 
 # ---- Bibliothèque statique partagée (tests + binaire) ----
