@@ -22,12 +22,13 @@ Usage : python3 hand_bridge.py [camera_id=0] [--no-window]
 
 import sys, os, pathlib
 import cv2
+import numpy as np
 import mediapipe as mp
 from mediapipe.tasks.python import vision as mpv
 from mediapipe.tasks.python.core import base_options as mpo
 
 # --------------------------------------------------------------------------
-# Localiser le modèle
+# Localiser les modèles
 # --------------------------------------------------------------------------
 SCRIPT_DIR  = pathlib.Path(__file__).parent.resolve()
 MODEL_PATHS = [
@@ -36,11 +37,79 @@ MODEL_PATHS = [
     pathlib.Path("../models/hand_landmarker.task"),
 ]
 
+ML_MODEL_PATHS = [
+    SCRIPT_DIR.parent / "models" / "gesture_classifier.pkl",
+    pathlib.Path("models/gesture_classifier.pkl"),
+]
+ML_LABELS_PATHS = [
+    SCRIPT_DIR.parent / "models" / "gesture_labels.txt",
+    pathlib.Path("models/gesture_labels.txt"),
+]
+
 def find_model():
     for p in MODEL_PATHS:
         if p.exists():
             return str(p)
     return None
+
+
+# --------------------------------------------------------------------------
+# Classificateur ML (chargé une fois au démarrage)
+# --------------------------------------------------------------------------
+_ml_clf    = None
+_ml_labels = None   # list[str] indexé par la prédiction entière
+
+def _load_ml_model():
+    global _ml_clf, _ml_labels
+    try:
+        import joblib
+    except ImportError:
+        sys.stderr.write("[bridge] joblib absent — modèle ML ignoré (pip install joblib)\n")
+        return
+
+    for p in ML_MODEL_PATHS:
+        if p.exists():
+            _ml_clf = joblib.load(str(p))
+            break
+
+    for p in ML_LABELS_PATHS:
+        if p.exists():
+            _ml_labels = p.read_text().strip().splitlines()
+            break
+
+    if _ml_clf is not None and _ml_labels is not None:
+        sys.stderr.write(
+            f"[bridge] Modèle ML chargé → {len(_ml_labels)} classes : {_ml_labels}\n")
+    else:
+        if _ml_clf is None:
+            sys.stderr.write("[bridge] Pas de modèle ML (models/gesture_classifier.pkl absent)\n")
+        else:
+            sys.stderr.write("[bridge] Labels ML absents (models/gesture_labels.txt absent)\n")
+        _ml_clf = None
+
+
+def _normalize(lm_list):
+    """Même normalisation que collect_gestures.py : wrist à l'origine + scale max."""
+    pts = np.array([[lm.x, lm.y, lm.z] for lm in lm_list], dtype=np.float32)
+    pts -= pts[0]
+    sc = np.max(np.abs(pts))
+    if sc > 1e-6:
+        pts /= sc
+    return pts.flatten().reshape(1, -1)
+
+
+def predict_gesture(lm_list) -> str:
+    """Retourne le nom du geste prédit, ou '' si pas de modèle / main mal détectée."""
+    if _ml_clf is None or _ml_labels is None:
+        return ""
+    try:
+        feat  = _normalize(lm_list)
+        idx   = int(_ml_clf.predict(feat)[0])
+        if 0 <= idx < len(_ml_labels):
+            return _ml_labels[idx]
+    except Exception as e:
+        sys.stderr.write(f"[bridge] Prédiction échouée : {e}\n")
+    return ""
 
 # Connexions entre landmarks pour dessiner le skeleton
 HAND_CONNECTIONS = [
@@ -87,7 +156,10 @@ def main():
         if arg == "--no-window": show_window = False
         elif arg.isdigit():      camera_id = int(arg)
 
-    # ---- Modèle ----
+    # ---- Modèle ML (facultatif) ----
+    _load_ml_model()
+
+    # ---- Modèle landmarks ----
     model_path = find_model()
     if not model_path:
         sys.stderr.write("[bridge] Modèle introuvable. Placez hand_landmarker.task dans models/\n")
@@ -139,7 +211,14 @@ def main():
                 for lm in lm_list:
                     coords += [f"{lm.x:.5f}", f"{lm.y:.5f}", f"{lm.z:.5f}"]
                     lm_norm.append((lm.x, lm.y, lm.z))
-                print(f"HAND {side} " + " ".join(coords), flush=True)
+
+                # Prédiction ML (suffixe optionnel)
+                gesture_suffix = ""
+                ml_pred = predict_gesture(lm_list)
+                if ml_pred:
+                    gesture_suffix = f" GESTURE {ml_pred}"
+
+                print(f"HAND {side} " + " ".join(coords) + gesture_suffix, flush=True)
 
                 if show_window:
                     draw_skeleton(frame, lm_norm, side)

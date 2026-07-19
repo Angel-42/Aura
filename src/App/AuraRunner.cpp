@@ -254,8 +254,20 @@ void AuraRunner::processHand(HandState& hs, const Vision::DetectionResult& resul
 
     Core::GestureEvent event;
     if (canAct) {
+        // GestureDetector toujours lancé (gère l'état temporel des swipes)
         event      = hs.detector.classify(result, frameW, frameH);
         event.side = result.side;
+
+        // Si le bridge ML a prédit un geste statique, il remplace le détecteur
+        // géométrique — sauf pour les swipes (temporels) qui restent du C++
+        const bool isMlSwipe =
+            result.mlGesture >= Core::GestureType::SWIPE_LEFT;
+        const bool isGeoSwipe =
+            event.type >= Core::GestureType::SWIPE_LEFT;
+
+        if (result.mlGesture != Core::GestureType::NONE && !isMlSwipe && !isGeoSwipe) {
+            event.type = result.mlGesture;
+        }
 
         handleMovement(hs, result, frameW, frameH, event.type);
         handleDrag(hs, event.type);

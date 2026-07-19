@@ -1,4 +1,5 @@
 #include "Aura/Vision/HandTracker.hpp"
+#include "Aura/Core/GestureEvent.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -127,8 +128,20 @@ std::vector<DetectionResult> HandTracker::readAllFromBridge(int fw, int fh) {
                 lm.pts[i].z = strtof(s, &s);
             }
 
+            // Suffixe optionnel "GESTURE <NAME>" envoyé par le bridge ML
+            Core::GestureType mlGesture = Core::GestureType::NONE;
+            while (*s == ' ' || *s == '\t') ++s;
+            if (strncmp(s, "GESTURE ", 8) == 0) {
+                s += 8;
+                char* end = s;
+                while (*end && *end != ' ' && *end != '\n' && *end != '\r') ++end;
+                mlGesture = Core::gestureFromName(std::string_view(s, end - s));
+            }
+
             int idx = (side == Core::HandSide::RIGHT) ? 1 : 0;
-            results.push_back(landmarksToResult(lm, side, idx, fw, fh));
+            auto r = landmarksToResult(lm, side, idx, fw, fh);
+            r.mlGesture = mlGesture;
+            results.push_back(r);
         }
         // lignes inconnues → ignorer
     }

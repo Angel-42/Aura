@@ -48,6 +48,8 @@ struct DetectionResult {
     std::vector<cv::Point2f> fingertips;
     int                      fingerCount = 0;
     LandmarkData             landmarks;   // rempli si bridge MediaPipe actif
+    // Geste prédit par le modèle ML (NONE si pas de modèle ou frame ambiguë)
+    Core::GestureType mlGesture = Core::GestureType::NONE;
 };
 
 } // namespace Aura::Vision

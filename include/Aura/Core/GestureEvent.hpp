@@ -2,6 +2,7 @@
 #include <opencv2/core/types.hpp>
 #include <chrono>
 #include <string>
+#include <string_view>
 
 namespace Aura::Core {
 
@@ -47,6 +48,27 @@ inline std::string gestureName(GestureType t) {
         case GestureType::SWIPE_DOWN:    return "SWIPE_DOWN";
         default:                          return "NONE";
     }
+}
+
+inline GestureType gestureFromName(std::string_view name) {
+    if (name == "OPEN_PALM")     return GestureType::OPEN_PALM;
+    if (name == "FOUR_FINGERS")  return GestureType::FOUR_FINGERS;
+    if (name == "FIST")          return GestureType::FIST;
+    if (name == "POINT")         return GestureType::POINT;
+    if (name == "TWO_FINGERS")   return GestureType::TWO_FINGERS;
+    if (name == "THREE_FINGERS") return GestureType::THREE_FINGERS;
+    if (name == "PINCH")         return GestureType::PINCH;
+    if (name == "PINCH_MIDDLE")  return GestureType::PINCH_MIDDLE;
+    if (name == "PINCH_RING")    return GestureType::PINCH_RING;
+    if (name == "PINCH_PINKY")   return GestureType::PINCH_PINKY;
+    if (name == "PINCH_DOUBLE")  return GestureType::PINCH_DOUBLE;
+    if (name == "PINCH_SIDE")    return GestureType::PINCH_SIDE;
+    if (name == "ZTAP")          return GestureType::ZTAP;
+    if (name == "SWIPE_LEFT")    return GestureType::SWIPE_LEFT;
+    if (name == "SWIPE_RIGHT")   return GestureType::SWIPE_RIGHT;
+    if (name == "SWIPE_UP")      return GestureType::SWIPE_UP;
+    if (name == "SWIPE_DOWN")    return GestureType::SWIPE_DOWN;
+    return GestureType::NONE;
 }
 
 enum class HandSide { UNKNOWN, LEFT, RIGHT };
