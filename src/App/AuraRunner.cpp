@@ -265,30 +265,60 @@ void AuraRunner::handleMovement(HandState& hs, const Vision::DetectionResult& re
                                  int frameW, int frameH, Core::GestureType gesture) {
     if (!opts_.inputEnabled || !controller_.available()) return;
 
-    // Geler le curseur sauf pour les poses de navigation
-    switch (gesture) {
-        case Core::GestureType::OPEN_PALM:
-        case Core::GestureType::POINT:
-        case Core::GestureType::FIST:
-        case Core::GestureType::NONE:
-            break;
-        default:
-            hs.lastHandPos = result.smoothedPoint;
-            return;
-    }
-
-    if (opts_.absolute) {
-        controller_.moveMouse(static_cast<int>(result.smoothedPoint.x),
-                              static_cast<int>(result.smoothedPoint.y),
-                              frameW, frameH);
-        hs.lastHandPos = result.smoothedPoint;
+    // POINT  → navigation principale (index levé = mapping absolu du bout du doigt)
+    // FIST   → drag (relatif, curseur suit la main)
+    // tout le reste → curseur gelé pendant les gestes d'action
+    if (gesture != Core::GestureType::POINT &&
+        gesture != Core::GestureType::FIST) {
+        // Mémoriser la position pour reprendre proprement si on revient en POINT
+        if (result.found) hs.lastHandPos = result.smoothedPoint;
         return;
     }
 
-    const cv::Point2f& current = result.smoothedPoint;
+    // ── POINT avec MediaPipe : mapping absolu du bout de l'index ─────────────
+    if (gesture == Core::GestureType::POINT &&
+        tracker_.usesBridge() && result.landmarks.found) {
+
+        const auto& tip = result.landmarks.tip(1);  // index finger TIP
+        cv::Point2f rawTip = {tip.x * static_cast<float>(frameW),
+                              tip.y * static_cast<float>(frameH)};
+
+        // Kalman fort : filtre les micro-tremblements du bout du doigt
+        cv::Point2f kTip = hs.tipSmoother.update(rawTip);
+
+        // EMA additionnelle pour une trajectoire parfaitement fluide
+        if (hs.smoothedCursor.x < 0.f) {
+            hs.smoothedCursor = kTip;
+            virtualCursor_    = kTip;
+        }
+        hs.smoothedCursor.x = hs.smoothedCursor.x * kTipEma + kTip.x * (1.f - kTipEma);
+        hs.smoothedCursor.y = hs.smoothedCursor.y * kTipEma + kTip.y * (1.f - kTipEma);
+        virtualCursor_ = hs.smoothedCursor;
+
+        controller_.moveMouse(static_cast<int>(hs.smoothedCursor.x),
+                              static_cast<int>(hs.smoothedCursor.y),
+                              frameW, frameH);
+        hs.lastHandPos = kTip;
+        return;
+    }
+
+    // ── Fallback relatif : FIST (drag) ou POINT sans MediaPipe ──────────────
+    const cv::Point2f& current = opts_.absolute ? result.smoothedPoint
+                                                 : result.smoothedPoint;
+    if (opts_.absolute) {
+        controller_.moveMouse(static_cast<int>(current.x),
+                              static_cast<int>(current.y),
+                              frameW, frameH);
+        hs.lastHandPos    = current;
+        hs.smoothedCursor = current;
+        virtualCursor_    = current;
+        return;
+    }
+
     if (hs.lastHandPos.x < 0.f) {
-        hs.lastHandPos = current;
-        virtualCursor_ = current;
+        hs.lastHandPos    = current;
+        virtualCursor_    = current;
+        hs.smoothedCursor = current;
         return;
     }
 
@@ -305,8 +335,13 @@ void AuraRunner::handleMovement(HandState& hs, const Vision::DetectionResult& re
     virtualCursor_.y = std::clamp(virtualCursor_.y + dy * opts_.speed,
                                    0.f, static_cast<float>(frameH - 1));
 
-    controller_.moveMouse(static_cast<int>(virtualCursor_.x),
-                          static_cast<int>(virtualCursor_.y),
+    // EMA légère sur le mode relatif aussi
+    if (hs.smoothedCursor.x < 0.f) hs.smoothedCursor = virtualCursor_;
+    hs.smoothedCursor.x = hs.smoothedCursor.x * 0.5f + virtualCursor_.x * 0.5f;
+    hs.smoothedCursor.y = hs.smoothedCursor.y * 0.5f + virtualCursor_.y * 0.5f;
+
+    controller_.moveMouse(static_cast<int>(hs.smoothedCursor.x),
+                          static_cast<int>(hs.smoothedCursor.y),
                           frameW, frameH);
 }
 

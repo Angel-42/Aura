@@ -41,7 +41,11 @@ struct HandState {
     Core::GestureType lastGesture = Core::GestureType::NONE;
     std::chrono::steady_clock::time_point lastActionTime{};
 
-    cv::Point2f lastHandPos = {-1.f, -1.f};  // pour le delta curseur relatif
+    cv::Point2f lastHandPos    = {-1.f, -1.f};  // pour le delta curseur relatif
+    cv::Point2f smoothedCursor = {-1.f, -1.f};  // EMA sur la position finale
+
+    // Kalman fort dédié au bout de l'index (POINT absolu)
+    Core::KalmanFilter2D tipSmoother{5e-4f, 8e-1f};
 
     bool isDragging     = false;
     int  fistFrameCount = 0;
@@ -77,9 +81,11 @@ private:
     // Curseur virtuel partagé (une seule position physique de souris)
     cv::Point2f virtualCursor_ = {0.f, 0.f};
 
-    static constexpr int kDragActivateFrames   = 20;
-    static constexpr int kScrollActivateFrames = 10;
-    static constexpr int kActionCooldownMs     = 350;
+    static constexpr int   kDragActivateFrames   = 20;
+    static constexpr int   kScrollActivateFrames = 10;
+    static constexpr int   kActionCooldownMs     = 250;   // réduit : réponse plus vive
+    // EMA sur le bout de l'index : 0 = instantané, 1 = figé. ~0.55 = bon équilibre
+    static constexpr float kTipEma              = 0.55f;
 
     // Initialisation
     bool init();
