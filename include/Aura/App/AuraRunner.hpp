@@ -68,6 +68,11 @@ public:
     void stop() { stopRequested_.store(true, std::memory_order_relaxed); }
     Core::EventQueue<Core::GestureEvent>& eventQueue() { return queue_; }
 
+    // Demande un rechargement du profil actif (thread-safe, depuis la démo)
+    void reloadProfile() { reloadRequested_.store(true, std::memory_order_release); }
+    [[nodiscard]] std::filesystem::path activeProfilePath() const { return activeProfilePath_; }
+    [[nodiscard]] std::string           activeProfileName() const { return activeProfile_; }
+
 private:
     RunnerOptions opts_;
 
@@ -122,6 +127,8 @@ private:
                        const cv::Point2f& normPos, int frameW, int frameH);
 
     std::atomic<bool> stopRequested_{false};
+    std::atomic<bool> reloadRequested_{false};
+    std::filesystem::path activeProfilePath_;
     std::unique_ptr<AutoProfileSwitcher> autoSwitcher_;
     std::string activeProfile_;
 

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 
 namespace Aura::App {
 
@@ -117,11 +118,13 @@ void AuraRunner::loadProfile(const Config::ProfileManager& pm, const std::string
         if (name != "default")
             std::cerr << "[AuraRunner] Profil '" << name << "' introuvable — fallback default\n";
         mapper_.loadDefault();
-        activeProfile_ = "default";
+        activeProfile_     = "default";
+        activeProfilePath_ = pm.path("default");
         return;
     }
     mapper_.load(pm.path(name));
-    activeProfile_ = name;
+    activeProfile_     = name;
+    activeProfilePath_ = pm.path(name);
     std::cout << "[AuraRunner] Profil '" << name << "' chargé\n";
 }
 
@@ -178,6 +181,12 @@ void AuraRunner::run() {
     std::cout << "Appuyez sur 'q' pour quitter.\n\n";
 
     while (!stopRequested_.load(std::memory_order_relaxed)) {
+        // Rechargement demandé depuis la démo (live rebinding)
+        if (reloadRequested_.exchange(false, std::memory_order_acquire)) {
+            Config::ProfileManager pm;
+            loadProfile(pm, activeProfile_);
+        }
+
         // Auto-switch profil selon l'app active
         if (autoSwitcher_) {
             std::string newProfile;
