@@ -32,19 +32,19 @@ void AutoProfileSwitcher::createTemplateIfMissing(const std::filesystem::path& p
     if (std::filesystem::exists(path)) return;
     std::ofstream f(path);
     if (!f) return;
-    f << "# AURA — Changement de profil automatique selon l'app active\n"
+    f << "# AURA — Overrides de profil automatique\n"
       << "# Format : mot-clé (insensible à la casse) = nom_du_profil\n"
       << "# La première règle qui correspond gagne.\n"
       << "#\n"
-      << "firefox   = browser\n"
-      << "chrome    = browser\n"
-      << "safari    = browser\n"
-      << "arc       = browser\n"
+      << "# Les apps courantes sont déjà reconnues automatiquement :\n"
+      << "#   Firefox, Chrome, Safari, Arc, Brave, Opera  → browser\n"
+      << "#   Steam, Minecraft, Valorant, CS2, Fortnite… → gaming\n"
+      << "#   Tout le reste                               → default\n"
       << "#\n"
-      << "# minecraft = gaming\n"
-      << "# valorant  = gaming\n"
-      << "# steam     = gaming\n";
-    std::cout << "[AutoProfile] Template créé → " << path << "\n";
+      << "# Ce fichier sert uniquement pour les cas personnalisés :\n"
+      << "# mon_app       = gaming\n"
+      << "# mon_editeur   = default\n";
+    std::cout << "[AutoProfile] Config créée → " << path << "\n";
 }
 
 // --------------------------------------------------------------------------
@@ -115,12 +115,49 @@ std::string AutoProfileSwitcher::getActiveAppName() const {
 }
 
 std::string AutoProfileSwitcher::matchProfile(const std::string& appName) const {
-    if (rules_.empty()) return "default";
     std::string lower = appName;
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](unsigned char c) { return std::tolower(c); });
+
+    // Règles utilisateur (auto_profile.txt) — priorité maximale
     for (const auto& [pattern, profile] : rules_)
         if (lower.find(pattern) != std::string::npos) return profile;
+
+    // Base built-in — couvre les apps courantes sans configuration
+    static const std::pair<const char*, const char*> kBuiltin[] = {
+        // Navigateurs → browser
+        {"firefox",        "browser"},
+        {"chrome",         "browser"},
+        {"chromium",       "browser"},
+        {"safari",         "browser"},
+        {"arc",            "browser"},
+        {"brave",          "browser"},
+        {"opera",          "browser"},
+        {"vivaldi",        "browser"},
+        {"edge",           "browser"},
+        {"tor browser",    "browser"},
+        // Jeux / launchers → gaming
+        {"steam",          "gaming"},
+        {"minecraft",      "gaming"},
+        {"valorant",       "gaming"},
+        {"fortnite",       "gaming"},
+        {"overwatch",      "gaming"},
+        {"apex",           "gaming"},
+        {"league of legends", "gaming"},
+        {"dota",           "gaming"},
+        {"counter-strike", "gaming"},
+        {"csgo",           "gaming"},
+        {"cs2",            "gaming"},
+        {"cyberpunk",      "gaming"},
+        {"gta",            "gaming"},
+        {"roblox",         "gaming"},
+        {"hollow knight",  "gaming"},
+        {"celeste",        "gaming"},
+        {"unity",          "gaming"},   // éditeur Unity = souvent test de jeu
+    };
+    for (const auto& [pattern, profile] : kBuiltin)
+        if (lower.find(pattern) != std::string::npos) return profile;
+
     return "default";
 }
 
