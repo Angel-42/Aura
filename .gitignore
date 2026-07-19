@@ -49,6 +49,7 @@
 # Binary files
 /build/aura
 /aura
+/aura_demo
 
 # Fichiers locaux non versionnés
 .context/
