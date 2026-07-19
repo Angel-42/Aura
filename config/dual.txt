@@ -1,0 +1,16 @@
+# AURA — Gestes bimanuels (main gauche + main droite simultanément)
+# Format : GESTE_GAUCHE + GESTE_DROIT = ACTION [PARAMS]
+# Les mêmes actions que dans les profils standard.
+# Tenu 5 frames (~170ms) pour éviter les faux déclenchements.
+
+# Undo / Redo
+FIST + FIST                 = KEY_COMBO CMD Z
+FIST + OPEN_PALM            = KEY_COMBO CMD SHIFT Z
+
+# Édition
+OPEN_PALM + OPEN_PALM       = KEY_COMBO CMD A
+PINCH_DOUBLE + PINCH_DOUBLE = KEY_COMBO CMD C
+PINCH_SIDE + PINCH_SIDE     = KEY_COMBO CMD V
+
+# Sauvegarde
+OPEN_PALM + FIST            = KEY_COMBO CMD S

@@ -29,6 +29,7 @@ set(AURA_LIB_SOURCES
     src/Vision/GestureDetector.cpp
     src/Input/Controller.cpp
     src/Input/Mapper.cpp
+    src/Input/DualMapper.cpp
     src/App/AuraRunner.cpp
     src/App/AutoProfileSwitcher.cpp
 )
@@ -67,6 +68,9 @@ add_custom_command(TARGET aura POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/config/gaming.txt"
             "$<TARGET_FILE_DIR:aura>/config/gaming.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/config/dual.txt"
+            "$<TARGET_FILE_DIR:aura>/config/dual.txt"
     COMMENT "Copie des profils dans le répertoire de build"
 )
 

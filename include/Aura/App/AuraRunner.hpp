@@ -9,6 +9,7 @@
 #include "Aura/Core/EventQueue.hpp"
 #include "Aura/Input/Controller.hpp"
 #include "Aura/Input/Mapper.hpp"
+#include "Aura/Input/DualMapper.hpp"
 #include "Aura/Config/CalibConfig.hpp"
 #include "Aura/Config/ProfileManager.hpp"
 #include <array>
@@ -75,6 +76,7 @@ private:
     Vision::HandTracker                  tracker_;
     Core::EventQueue<Core::GestureEvent> queue_;
     Input::Mapper                        mapper_;
+    Input::DualMapper                    dualMapper_;
     Input::Controller                    controller_;
 
     Vision::HSVRange hsvRange_;
@@ -87,9 +89,10 @@ private:
 
     static constexpr int   kDragActivateFrames   = 20;
     static constexpr int   kScrollActivateFrames = 10;
-    static constexpr int   kActionCooldownMs     = 250;   // réduit : réponse plus vive
-    // EMA sur le bout de l'index : 0 = instantané, 1 = figé. ~0.55 = bon équilibre
-    static constexpr float kTipEma              = 0.55f;
+    static constexpr int   kActionCooldownMs     = 250;
+    static constexpr float kTipEma               = 0.55f;
+    static constexpr int   kDualActivateFrames   = 5;     // frames de maintien avant déclenchement
+    static constexpr int   kDualCooldownMs       = 600;   // ms entre deux gestes bimanuels
 
     // Initialisation
     bool init();
@@ -100,6 +103,7 @@ private:
 
     // Boucle principale
     void processFrame(const cv::Mat& frame);
+    void checkDualGesture(int frameW, int frameH);
     void processHand(HandState& hs, const Vision::DetectionResult& result,
                      int frameW, int frameH);
 
@@ -119,7 +123,13 @@ private:
 
     std::atomic<bool> stopRequested_{false};
     std::unique_ptr<AutoProfileSwitcher> autoSwitcher_;
-    std::string activeProfile_;  // profil actuellement chargé
+    std::string activeProfile_;
+
+    // État des gestes bimanuels
+    Core::GestureType lastDualLeft_  = Core::GestureType::NONE;
+    Core::GestureType lastDualRight_ = Core::GestureType::NONE;
+    int               dualHoldFrames_ = 0;
+    std::chrono::steady_clock::time_point lastDualActionTime_{};
 
     // Debug UI
     bool debugUICreated_ = false;

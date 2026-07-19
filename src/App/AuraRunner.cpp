@@ -80,6 +80,21 @@ void AuraRunner::setupMapping() {
     const std::string name = opts_.profile.empty() ? "default" : opts_.profile;
     loadProfile(pm, name);
 
+    // Gestes bimanuels — dual.txt : ~/.aura/dual.txt, sinon config/dual.txt
+    {
+        const char* home = std::getenv("HOME");
+        std::filesystem::path userDual =
+            (home ? std::filesystem::path(home) : std::filesystem::path("."))
+            / ".aura" / "dual.txt";
+        if (std::filesystem::exists(userDual)) {
+            dualMapper_.load(userDual);
+        } else if (std::filesystem::exists("config/dual.txt")) {
+            dualMapper_.load("config/dual.txt");
+        } else if (std::filesystem::exists("../config/dual.txt")) {
+            dualMapper_.load("../config/dual.txt");
+        }
+    }
+
     // Auto-switch : activé par --auto-profile OU si ~/.aura/auto_profile.txt existe déjà
     {
         const char* home = std::getenv("HOME");
@@ -227,6 +242,9 @@ void AuraRunner::processFrame(const cv::Mat& frame) {
         }
     }
 
+    // Vérifier les combinaisons bimanuelles après traitement individuel
+    checkDualGesture(frameW, frameH);
+
     if (opts_.debug && !frame.empty()) {
         cv::Mat display = frame.clone();
         renderDebugOverlay(display, results);
@@ -245,6 +263,62 @@ void AuraRunner::processFrame(const cv::Mat& frame) {
         }
         std::cout << "     " << std::flush;
     }
+}
+
+// --------------------------------------------------------------------------
+// Gestes bimanuels
+// --------------------------------------------------------------------------
+
+void AuraRunner::checkDualGesture(int frameW, int frameH) {
+    if (dualMapper_.empty() || !opts_.inputEnabled) return;
+
+    // Les deux mains doivent être actives et stables
+    const bool leftActive  = handStates_[0].guard.isActive();
+    const bool rightActive = handStates_[1].guard.isActive();
+    if (!leftActive || !rightActive) {
+        dualHoldFrames_ = 0;
+        return;
+    }
+
+    const Core::GestureType left  = handStates_[0].lastGesture;
+    const Core::GestureType right = handStates_[1].lastGesture;
+
+    // Au moins une main doit avoir un geste non-NONE
+    if (left == Core::GestureType::NONE && right == Core::GestureType::NONE) {
+        dualHoldFrames_ = 0;
+        return;
+    }
+
+    // Accumule les frames de maintien si la même combinaison persiste
+    if (left == lastDualLeft_ && right == lastDualRight_) {
+        ++dualHoldFrames_;
+    } else {
+        dualHoldFrames_ = 1;
+        lastDualLeft_   = left;
+        lastDualRight_  = right;
+    }
+
+    if (dualHoldFrames_ < kDualActivateFrames) return;
+
+    // Cooldown entre deux déclenchements
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - lastDualActionTime_).count();
+    if (elapsed < kDualCooldownMs) return;
+
+    auto action = dualMapper_.lookup(left, right);
+    if (!action) return;
+
+    lastDualActionTime_ = now;
+    dualHoldFrames_     = 0;  // reset — doit être retenu à nouveau
+
+    if (opts_.verbose) {
+        std::cout << "[Dual] " << Core::gestureName(left)
+                  << " + " << Core::gestureName(right) << "\n";
+    }
+
+    // Position centrale écran pour les actions qui en ont besoin
+    executeAction(*action, {0.5f, 0.5f}, frameW, frameH);
 }
 
 void AuraRunner::processHand(HandState& hs, const Vision::DetectionResult& result,
