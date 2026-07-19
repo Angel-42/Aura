@@ -4,6 +4,9 @@ set(TEST_SOURCES
     test_kalman.cpp
     test_gesture_detector.cpp
     test_mapper.cpp
+    test_dual_mapper.cpp
+    test_gesture_event.cpp
+    test_controller.cpp
 )
 
 add_executable(aura_tests ${TEST_SOURCES})
