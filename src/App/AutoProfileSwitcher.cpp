@@ -91,6 +91,42 @@ void AutoProfileSwitcher::reload() {
 // Détection de l'app active (appel bloquant, ~50-150ms)
 // --------------------------------------------------------------------------
 
+// Retourne la catégorie macOS de l'app active ("games", "action-games", etc.)
+// ou "" si non disponible.
+#ifdef __APPLE__
+static std::string getActiveAppCategory() {
+    // Récupère le chemin de l'app au premier plan
+    FILE* pipe = popen(
+        "osascript -e 'POSIX path of (path to frontmost application)' 2>/dev/null", "r");
+    if (!pipe) return "";
+    char buf[1024] = {};
+    fgets(buf, sizeof(buf), pipe);
+    pclose(pipe);
+    std::string appPath = buf;
+    while (!appPath.empty() && (appPath.back() == '\n' || appPath.back() == '\r' || appPath.back() == '/'))
+        appPath.pop_back();
+    if (appPath.empty()) return "";
+
+    // mdls lit la catégorie depuis les métadonnées Spotlight
+    std::string cmd = "mdls -name kMDItemAppStoreCategory \"" + appPath + "\" 2>/dev/null";
+    FILE* pipe2 = popen(cmd.c_str(), "r");
+    if (!pipe2) return "";
+    char buf2[256] = {};
+    fgets(buf2, sizeof(buf2), pipe2);
+    pclose(pipe2);
+    std::string result(buf2);
+    // Format: "kMDItemAppStoreCategory = \"Games\""
+    auto q1 = result.find('"');
+    if (q1 == std::string::npos) return "";
+    auto q2 = result.find('"', q1 + 1);
+    if (q2 == std::string::npos) return "";
+    std::string cat = result.substr(q1 + 1, q2 - q1 - 1);
+    std::transform(cat.begin(), cat.end(), cat.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    return cat;  // ex: "games", "action games", "role playing games", "(null)"
+}
+#endif
+
 std::string AutoProfileSwitcher::getActiveAppName() const {
 #ifdef __APPLE__
     FILE* pipe = popen(
@@ -119,11 +155,20 @@ std::string AutoProfileSwitcher::matchProfile(const std::string& appName) const 
     std::transform(lower.begin(), lower.end(), lower.begin(),
                    [](unsigned char c) { return std::tolower(c); });
 
-    // Règles utilisateur (auto_profile.txt) — priorité maximale
+    // 1. Règles utilisateur (auto_profile.txt) — priorité maximale
     for (const auto& [pattern, profile] : rules_)
         if (lower.find(pattern) != std::string::npos) return profile;
 
-    // Base built-in — couvre les apps courantes sans configuration
+    // 2. Catégorie macOS — détecte n'importe quel jeu App Store / Steam
+#ifdef __APPLE__
+    {
+        std::string cat = getActiveAppCategory();
+        if (!cat.empty() && cat != "(null)" && cat.find("game") != std::string::npos)
+            return "gaming";
+    }
+#endif
+
+    // 3. Base built-in — noms connus (jeux hors App Store, browsers)
     static const std::pair<const char*, const char*> kBuiltin[] = {
         // Navigateurs → browser
         {"firefox",        "browser"},

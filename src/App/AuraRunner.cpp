@@ -80,15 +80,20 @@ void AuraRunner::setupMapping() {
     const std::string name = opts_.profile.empty() ? "default" : opts_.profile;
     loadProfile(pm, name);
 
-    // Auto-switch : initialiser le switcher si demandé
-    if (opts_.autoProfile) {
+    // Auto-switch : activé par --auto-profile OU si ~/.aura/auto_profile.txt existe déjà
+    {
         const char* home = std::getenv("HOME");
         std::filesystem::path cfgPath =
             (home ? std::filesystem::path(home) : std::filesystem::path("."))
             / ".aura" / "auto_profile.txt";
-        AutoProfileSwitcher::createTemplateIfMissing(cfgPath);
-        autoSwitcher_ = std::make_unique<AutoProfileSwitcher>(cfgPath);
-        std::cout << "[AuraRunner] Auto-switch profil activé\n";
+
+        bool activate = opts_.autoProfile || std::filesystem::exists(cfgPath);
+        if (activate) {
+            AutoProfileSwitcher::createTemplateIfMissing(cfgPath);
+            autoSwitcher_ = std::make_unique<AutoProfileSwitcher>(cfgPath);
+            std::cout << "[AuraRunner] Auto-switch profil actif"
+                      << (opts_.autoProfile ? " (--auto-profile)" : " (config détectée)") << "\n";
+        }
     }
 }
 
