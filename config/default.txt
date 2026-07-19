@@ -4,28 +4,26 @@
 # Format : GESTURE = ACTION [PARAM1 [PARAM2 ...]]
 # Préfixe LEFT_ ou RIGHT_ pour cibler une main spécifique.
 #
-#  Logique de navigation :
-#   POINT (index seul)   →  curseur suit le bout du doigt   [géré en dur]
-#   OPEN_PALM            →  pose neutre, curseur gelé        [géré en dur]
-#   FIST maintenu        →  drag souris                      [géré en dur]
-#   TWO_FINGERS maintenu →  scroll continu                   [géré en dur]
+#  Logique de navigation (gérée en dur, non remappable) :
+#   POINT (index seul)   →  curseur suit le bout du doigt
+#   OPEN_PALM            →  pose neutre, curseur gelé
+#   FIST maintenu        →  drag souris
+#   TWO_FINGERS maintenu →  scroll continu
 
 # ── Clics souris ─────────────────────────────────────────────────────────────
 PINCH           = MOUSE_CLICK LEFT          # pouce + index
 PINCH_MIDDLE    = MOUSE_CLICK RIGHT         # pouce + majeur
 PINCH_DOUBLE    = MOUSE_DOUBLE_CLICK LEFT   # pouce + index + majeur
-ZTAP            = MOUSE_CLICK LEFT          # push vers caméra (alternatif)
+
+# ── Touches utiles ────────────────────────────────────────────────────────────
+ZTAP            = KEY_PRESS ESCAPE          # push vers caméra → fermer/annuler
+THREE_FINGERS   = KEY_PRESS SPACE           # scroll page / play-pause
+FOUR_FINGERS    = KEY_COMBO CMD TAB         # switcher d'application
 
 # ── Scroll rapide ─────────────────────────────────────────────────────────────
 SWIPE_UP        = SCROLL UP 3
 SWIPE_DOWN      = SCROLL DOWN 3
 
-# ── Navigation clavier (touches fléchées, universel) ─────────────────────────
-SWIPE_LEFT      = KEY_PRESS LEFT
-SWIPE_RIGHT     = KEY_PRESS RIGHT
-
-# ── Poses libres ─────────────────────────────────────────────────────────────
-# THREE_FINGERS = KEY_PRESS SPACE
-# FOUR_FINGERS  = KEY_PRESS TAB
-# PINCH_RING    = KEY_PRESS ESC
-# PINCH_PINKY   = KEY_PRESS BACKSPACE
+# ── Navigation contextuelle ───────────────────────────────────────────────────
+SWIPE_LEFT      = KEY_COMBO CMD LEFT        # retour browser / début de ligne
+SWIPE_RIGHT     = KEY_COMBO CMD RIGHT       # avant browser / fin de ligne
